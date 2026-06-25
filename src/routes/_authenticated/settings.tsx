@@ -29,13 +29,13 @@ function SettingsPage() {
   const aFn = useServerFn(updateAssumptions);
   const pFn = useServerFn(updateProfile);
 
-  const [a, setA] = useState({ ...DEFAULT_ASSUMPTIONS, ...(data.settings?.assumptions ?? {}) });
+  const [a, setA] = useState({ ...DEFAULT_ASSUMPTIONS, ...((data.settings?.assumptions as object) ?? {}) });
   const [p, setP] = useState({
     display_name: data.profile?.display_name ?? "",
     base_currency: data.profile?.base_currency ?? "GBP",
   });
   useEffect(() => {
-    setA({ ...DEFAULT_ASSUMPTIONS, ...(data.settings?.assumptions ?? {}) });
+    setA({ ...DEFAULT_ASSUMPTIONS, ...((data.settings?.assumptions as object) ?? {}) });
     setP({ display_name: data.profile?.display_name ?? "", base_currency: data.profile?.base_currency ?? "GBP" });
   }, [data]);
 

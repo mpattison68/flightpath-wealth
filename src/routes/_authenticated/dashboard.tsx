@@ -38,7 +38,7 @@ function DashboardPage() {
   const holdings = (data.holdings ?? []) as Holding[];
   const assumptions: Assumptions = {
     ...DEFAULT_ASSUMPTIONS,
-    ...(data.settings?.assumptions ?? {}),
+    ...((data.settings?.assumptions as object) ?? {}),
   };
   const currency = "GBP";
 
