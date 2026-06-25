@@ -71,7 +71,7 @@ function RetirementPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const assumptions: Assumptions = { ...DEFAULT_ASSUMPTIONS, ...(dash.settings?.assumptions ?? {}) };
+  const assumptions: Assumptions = { ...DEFAULT_ASSUMPTIONS, ...((dash.settings?.assumptions as object) ?? {}) };
   const total = sumValue(dash.holdings as Holding[]);
   const years = form.target_retirement_date ? Math.max(0, yearsBetween(new Date(), new Date(form.target_retirement_date))) : 0;
   const projected = projectFutureValue(total, 0, years, assumptions.real_growth_pct);
