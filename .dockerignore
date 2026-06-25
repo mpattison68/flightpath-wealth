@@ -1,0 +1,15 @@
+node_modules
+.output
+.tanstack
+.workspace
+.lovable
+.git
+.github
+.vscode
+.idea
+dist
+coverage
+*.log
+.env
+.env.*
+!.env.example
