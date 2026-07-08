@@ -44,6 +44,15 @@ Set repo secrets:
 | `VPS_SSH_KEY` | Private SSH key for that user |
 | `VPS_APP_DIR` | Path on VPS, e.g. `/opt/wealth-flightpath` |
 | `GHCR_PAT` | GitHub PAT with `read:packages` |
+| `VITE_SUPABASE_URL` | Supabase project URL (baked into client bundle at build time) |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Supabase publishable key (baked into client bundle at build time) |
+| `VITE_SUPABASE_PROJECT_ID` | Supabase project ref |
+
+> **Important:** `VITE_*` variables are read by Vite at **build time**, not
+> runtime. They must be provided as GitHub Actions secrets (for the GHCR
+> image build) AND set in `.env` on the VPS (for local `docker compose
+> build`). Without them, the browser bundle has no Supabase URL and every
+> auth/data screen shows "This page didn't load".
 
 Push to `main` → workflow builds the image, pushes to GHCR, SSHes into the VPS and runs `docker compose pull && up -d`.
 

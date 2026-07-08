@@ -5,7 +5,12 @@
 services:
   web:
     image: ${IMAGE:-ghcr.io/CHANGE_ME/wealth-flightpath-ai:latest}
-    build: .
+    build:
+      context: .
+      args:
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
+        VITE_SUPABASE_PUBLISHABLE_KEY: ${VITE_SUPABASE_PUBLISHABLE_KEY}
+        VITE_SUPABASE_PROJECT_ID: ${VITE_SUPABASE_PROJECT_ID}
     container_name: wealth-flightpath
     restart: unless-stopped
     env_file:
