@@ -10,7 +10,16 @@ RUN bun install --frozen-lockfile
 
 # Build the app — target Node server (nitro), not Cloudflare
 COPY . .
-ENV NITRO_PRESET=node-server
+# Vite bakes VITE_* vars at build time. Pass them as build args so the
+# browser bundle can talk to Supabase in production. Values are publishable
+# (safe to expose in the client bundle).
+ARG VITE_SUPABASE_URL
+ARG VITE_SUPABASE_PUBLISHABLE_KEY
+ARG VITE_SUPABASE_PROJECT_ID
+ENV NITRO_PRESET=node-server \
+    VITE_SUPABASE_URL=$VITE_SUPABASE_URL \
+    VITE_SUPABASE_PUBLISHABLE_KEY=$VITE_SUPABASE_PUBLISHABLE_KEY \
+    VITE_SUPABASE_PROJECT_ID=$VITE_SUPABASE_PROJECT_ID
 RUN bun run build
 
 # ---------- runtime ----------
