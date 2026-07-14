@@ -120,7 +120,7 @@ export function ImportHoldingsDialog() {
           <Upload className="mr-1.5 h-4 w-4" /> Import
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-5xl">
+      <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle>Import holdings</DialogTitle>
           <DialogDescription>
@@ -128,7 +128,7 @@ export function ImportHoldingsDialog() {
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="space-y-4 flex-1 overflow-auto min-h-0">
           <div className="flex flex-wrap items-end gap-3">
             <div className="flex-1 min-w-[260px] space-y-1.5">
               <Label className="text-xs">File</Label>
@@ -250,6 +250,31 @@ export function ImportHoldingsDialog() {
                   ))}
                 </TableBody>
               </Table>
+            </div>
+          )}
+
+          {rows.length > 0 && (
+            <div className="rounded-md border bg-muted/30 p-3">
+              <div className="text-xs font-medium text-muted-foreground mb-1.5">Totals by currency (selected)</div>
+              <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm tabular-nums">
+                {Object.entries(
+                  rows.filter((r) => r._keep).reduce<Record<string, number>>((acc, r) => {
+                    const c = (r.currency || "GBP").toUpperCase();
+                    acc[c] = (acc[c] ?? 0) + (Number(r.value) || 0);
+                    return acc;
+                  }, {}),
+                ).sort(([a], [b]) => a.localeCompare(b)).map(([ccy, total]) => (
+                  <div key={ccy}>
+                    <span className="text-muted-foreground mr-1.5">{ccy}</span>
+                    <span className="font-medium">
+                      {new Intl.NumberFormat("en-GB", { style: "currency", currency: ccy, maximumFractionDigits: 0 }).format(total)}
+                    </span>
+                  </div>
+                ))}
+                {rows.filter((r) => r._keep).length === 0 && (
+                  <span className="text-muted-foreground">No rows selected</span>
+                )}
+              </div>
             </div>
           )}
 
