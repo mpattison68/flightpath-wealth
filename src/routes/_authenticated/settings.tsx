@@ -1,14 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useSuspenseQuery, queryOptions, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { getSettings, updateProfile } from "@/lib/settings.functions";
+import { getSettings, updateProfile, updateUserSettings } from "@/lib/settings.functions";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
-import { HelpCircle, SlidersHorizontal, ArrowRight } from "lucide-react";
+import { HelpCircle, SlidersHorizontal, ArrowRight, Wallet } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 
@@ -24,18 +24,25 @@ function SettingsPage() {
   const { data } = useSuspenseQuery(settingsQuery);
   const qc = useQueryClient();
   const pFn = useServerFn(updateProfile);
+  const sFn = useServerFn(updateUserSettings);
 
   const [p, setP] = useState({
     display_name: data.profile?.display_name ?? "",
     base_currency: data.profile?.base_currency ?? "GBP",
     alt_currency: (data.profile as { alt_currency?: string | null } | null)?.alt_currency ?? "",
   });
+  const [primarySpendingCurrency, setPrimarySpendingCurrency] = useState<string>(
+    (data.settings as { primary_spending_currency?: string | null } | null)?.primary_spending_currency ?? "",
+  );
   useEffect(() => {
     setP({
       display_name: data.profile?.display_name ?? "",
       base_currency: data.profile?.base_currency ?? "GBP",
       alt_currency: (data.profile as { alt_currency?: string | null } | null)?.alt_currency ?? "",
     });
+    setPrimarySpendingCurrency(
+      (data.settings as { primary_spending_currency?: string | null } | null)?.primary_spending_currency ?? "",
+    );
   }, [data]);
 
   const saveP = useMutation({
@@ -45,6 +52,16 @@ function SettingsPage() {
       qc.invalidateQueries({ queryKey: ["settings"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
       qc.invalidateQueries({ queryKey: ["fx-alt"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const saveSpending = useMutation({
+    mutationFn: () => sFn({ data: { primary_spending_currency: primarySpendingCurrency ? primarySpendingCurrency : null } }),
+    onSuccess: () => {
+      toast.success("Spending currency saved");
+      qc.invalidateQueries({ queryKey: ["settings"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -74,6 +91,30 @@ function SettingsPage() {
                 />
               </Field>
               <Button onClick={() => saveP.mutate()} disabled={saveP.isPending}>Save profile</Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Wallet className="h-4 w-4" /> Purchasing Power
+              </CardTitle>
+              <CardDescription>
+                The currency you actually spend in. Later drives purchasing-power projections and healthcare / lifestyle cost inflation.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Field
+                label="Primary spending currency"
+                help="Distinct from base currency (reporting) and alternative currency (dashboard reference). This is what your day-to-day expenses are denominated in — e.g. ZAR if you live in South Africa but report your net worth in GBP."
+              >
+                <Input
+                  placeholder="e.g. GBP, ZAR, EUR"
+                  value={primarySpendingCurrency}
+                  onChange={(e) => setPrimarySpendingCurrency(e.target.value.toUpperCase().slice(0, 3))}
+                />
+              </Field>
+              <Button onClick={() => saveSpending.mutate()} disabled={saveSpending.isPending}>Save</Button>
             </CardContent>
           </Card>
 
