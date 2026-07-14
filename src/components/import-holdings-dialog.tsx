@@ -154,7 +154,7 @@ export function ImportHoldingsDialog() {
           </div>
 
           {rows.length > 0 && (
-            <div className="rounded-md border">
+            <div className="rounded-md border max-h-[55vh] overflow-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
