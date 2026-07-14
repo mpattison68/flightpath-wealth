@@ -3,26 +3,37 @@ import { useSuspenseQuery, queryOptions, useQueryClient, useMutation } from "@ta
 import { useServerFn } from "@tanstack/react-start";
 import { getActivePlan, upsertActivePlan } from "@/lib/retirement.functions";
 import { getDashboardData } from "@/lib/dashboard.functions";
+import { listEngines } from "@/lib/engines.functions";
+import { listAssumptions } from "@/lib/assumptions.functions";
+import { listSpending } from "@/lib/spending.functions";
+import { assumptionMap, get as getA } from "@/lib/assumptions/values";
 import { PageHeader } from "@/components/page-header";
 import { KpiCard } from "@/components/kpi-card";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useState, useEffect, useMemo } from "react";
 import { toast } from "sonner";
-import { sumValue, sustainableIncome, fireProgress, yearsBetween, projectFutureValue, readinessScore, type Assumptions, type Holding } from "@/lib/finance/calculators";
+import { sumValue, sustainableIncome, fireProgress, yearsBetween, projectFutureValue, readinessScore, dynamicFireTarget, type Assumptions, type Holding } from "@/lib/finance/calculators";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine } from "recharts";
 
 const planQuery = queryOptions({ queryKey: ["plan"], queryFn: () => getActivePlan() });
 const dashQuery = queryOptions({ queryKey: ["dashboard"], queryFn: () => getDashboardData() });
+const enginesQuery = queryOptions({ queryKey: ["engines"], queryFn: () => listEngines() });
+const assumptionsQuery = queryOptions({ queryKey: ["assumptions"], queryFn: () => listAssumptions() });
+const spendingQuery = queryOptions({ queryKey: ["spending"], queryFn: () => listSpending() });
 
 export const Route = createFileRoute("/_authenticated/retirement")({
   head: () => ({ meta: [{ title: "Retirement — Wealth Flightpath" }] }),
   loader: ({ context }) => Promise.all([
     context.queryClient.ensureQueryData(planQuery),
     context.queryClient.ensureQueryData(dashQuery),
+    context.queryClient.ensureQueryData(enginesQuery),
+    context.queryClient.ensureQueryData(assumptionsQuery),
+    context.queryClient.ensureQueryData(spendingQuery),
   ]),
   component: RetirementPage,
 });
@@ -35,6 +46,9 @@ const DEFAULT_ASSUMPTIONS: Assumptions = {
 function RetirementPage() {
   const { data: plan } = useSuspenseQuery(planQuery);
   const { data: dash } = useSuspenseQuery(dashQuery);
+  const { data: engines } = useSuspenseQuery(enginesQuery);
+  const { data: assumptionRows } = useSuspenseQuery(assumptionsQuery);
+  const { data: spending } = useSuspenseQuery(spendingQuery);
   const qc = useQueryClient();
   const upsertFn = useServerFn(upsertActivePlan);
 
@@ -72,43 +86,132 @@ function RetirementPage() {
   });
 
   const assumptions: Assumptions = { ...DEFAULT_ASSUMPTIONS, ...((dash.settings?.assumptions as object) ?? {}) };
+  const aMap = assumptionMap(assumptionRows);
+  const swrPct = getA(aMap, "withdrawal.swr", assumptions.swr_pct);
+  const equityReal = getA(aMap, "growth.equity_real", assumptions.real_growth_pct);
   const total = sumValue(dash.holdings as Holding[]);
   const years = form.target_retirement_date ? Math.max(0, yearsBetween(new Date(), new Date(form.target_retirement_date))) : 0;
-  const projected = projectFutureValue(total, 0, years, assumptions.real_growth_pct);
-  const sustainable = sustainableIncome(projected, assumptions.swr_pct);
-  const fire = fireProgress(total, assumptions.fire_target);
+  const projected = projectFutureValue(total, 0, years, equityReal);
+  const sustainable = sustainableIncome(projected, swrPct);
+
+  // -------- Dynamic FIRE target ---------------------------------------
+  const retirementYear = form.target_retirement_date
+    ? new Date(form.target_retirement_date).getFullYear()
+    : new Date().getFullYear() + Math.round(years);
+  const totalSpending = spending.reduce((s, r) => s + Number(r.annual_amount ?? 0), 0)
+    || form.desired_annual_income;
+  const statePensionYear = getA(aMap, "state_pension.start_date", 2045);
+  const statePensionAmount = retirementYear >= statePensionYear
+    ? getA(aMap, "state_pension.amount", 0) * (getA(aMap, "state_pension.confidence", 100) / 100)
+    : 0;
+  const consultingStart = getA(aMap, "consulting.start", 0);
+  const consultingDuration = getA(aMap, "consulting.duration", 0);
+  const consultingActive = retirementYear >= consultingStart && retirementYear < consultingStart + consultingDuration;
+  const consultingExpected = consultingActive
+    ? getA(aMap, "consulting.annual_income", 0) * (getA(aMap, "consulting.probability", 0) / 100)
+    : 0;
+  const fireDynamic = dynamicFireTarget({
+    targetSpending: totalSpending,
+    guaranteedIncome: statePensionAmount,
+    expectedIncome: consultingExpected,
+    swrPct,
+  });
+  const fire = fireProgress(total, fireDynamic.requiredCapital || assumptions.fire_target);
   const score = readinessScore({
     current: total,
-    fireTarget: assumptions.fire_target,
+    fireTarget: fireDynamic.requiredCapital || assumptions.fire_target,
     projectedAtRetirement: projected,
-    desiredIncome: form.desired_annual_income,
-    swrPct: assumptions.swr_pct,
+    desiredIncome: totalSpending,
+    swrPct,
   });
 
   const flightpath = useMemo(() => {
     const points: { year: number; value: number }[] = [];
     const totalYears = Math.ceil(years) + 10;
     for (let y = 0; y <= totalYears; y++) {
-      points.push({ year: new Date().getFullYear() + y, value: projectFutureValue(total, 0, y, assumptions.real_growth_pct) });
+      points.push({ year: new Date().getFullYear() + y, value: projectFutureValue(total, 0, y, equityReal) });
     }
     return points;
-  }, [total, years, assumptions.real_growth_pct]);
+  }, [total, years, equityReal]);
+
+  // Engine contributions at retirement year (informational tiles)
+  const engineTiles = engines.map((e) => {
+    let projectedIncome = 0;
+    let subtitle = "";
+    switch (e.kind) {
+      case "portfolio":
+        projectedIncome = sustainableIncome(projected, swrPct);
+        subtitle = `${swrPct}% of ${formatCurrency(projected)}`;
+        break;
+      case "state_pension":
+        projectedIncome = statePensionAmount;
+        subtitle = statePensionAmount > 0 ? `from ${statePensionYear}` : `starts ${statePensionYear}`;
+        break;
+      case "consulting":
+        projectedIncome = consultingExpected;
+        subtitle = consultingActive ? "active at retirement" : "ends before retirement";
+        break;
+      case "property":
+        projectedIncome = 0;
+        subtitle = "capital release";
+        break;
+      default:
+        subtitle = e.status;
+    }
+    return { ...e, projectedIncome, subtitle };
+  });
+
+  // Timeline milestones for reference lines
+  const currentYear = new Date().getFullYear();
+  const milestones = [
+    { year: retirementYear, label: "Retire" },
+    { year: statePensionYear, label: "State Pension" },
+    { year: consultingStart, label: "Consulting starts" },
+    { year: consultingStart + consultingDuration, label: "Consulting ends" },
+    { year: getA(aMap, "property.sale_year", 0), label: "Property sale" },
+  ].filter((m) => m.year >= currentYear && m.year <= currentYear + Math.ceil(years) + 10);
 
   return (
     <>
       <PageHeader title="Retirement Flightpath" description="Your journey to retirement, continuously monitored." />
       <div className="space-y-6 p-6">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Financial Engines</CardTitle>
+            <CardDescription>Retirement is funded by several independent income engines working together.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {engineTiles.map((e) => (
+              <div key={e.id} className="rounded-md border bg-card p-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-medium">{e.label}</div>
+                  <Badge variant="outline" className="text-[10px] capitalize">{e.status}</Badge>
+                </div>
+                <div className="mt-1 text-lg font-semibold tabular-nums">
+                  {e.projectedIncome > 0 ? formatCurrency(e.projectedIncome) : "—"}
+                </div>
+                <div className="text-[11px] text-muted-foreground">{e.subtitle}</div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <KpiCard label="Years remaining" value={years > 0 ? years.toFixed(1) : "—"} />
-          <KpiCard label="Projected at retirement" value={formatCurrency(projected)} hint={`At ${assumptions.real_growth_pct}% real`} />
-          <KpiCard label="Sustainable income" value={formatCurrency(sustainable)} hint={`vs target ${formatCurrency(form.desired_annual_income)}`} tone={sustainable >= form.desired_annual_income ? "positive" : "warning"} />
-          <KpiCard label="Readiness score" value={`${score}/100`} tone={score >= 80 ? "positive" : score >= 50 ? "neutral" : "warning"} hint={`FIRE ${formatPercent(fire)}`} />
+          <KpiCard label="Projected at retirement" value={formatCurrency(projected)} hint={`At ${equityReal}% real`} />
+          <KpiCard
+            label="Dynamic FIRE target"
+            value={formatCurrency(fireDynamic.requiredCapital)}
+            hint={`Spend ${formatCurrency(fireDynamic.targetSpending)} − income ${formatCurrency(fireDynamic.guaranteedIncome + fireDynamic.expectedIncome)}`}
+            tone={total >= fireDynamic.requiredCapital ? "positive" : "neutral"}
+          />
+          <KpiCard label="Readiness score" value={`${score}/100`} tone={score >= 80 ? "positive" : score >= 50 ? "neutral" : "warning"} hint={`FIRE ${formatPercent(fire)} · Sustainable ${formatCurrency(sustainable)}`} />
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Flightpath</CardTitle>
-            <CardDescription>Projected portfolio value in today's money.</CardDescription>
+            <CardTitle className="text-base">Flightpath & Timeline</CardTitle>
+            <CardDescription>Projected portfolio value in today's money, with key milestones marked.</CardDescription>
           </CardHeader>
           <CardContent className="h-80">
             <ResponsiveContainer width="100%" height="100%">
@@ -117,13 +220,34 @@ function RetirementPage() {
                 <XAxis dataKey="year" stroke="var(--color-muted-foreground)" fontSize={11} />
                 <YAxis stroke="var(--color-muted-foreground)" fontSize={11} width={80} tickFormatter={(v) => formatCurrency(v)} />
                 <Tooltip formatter={(v: number) => formatCurrency(v)} contentStyle={{ background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 8, fontSize: 12 }} />
-                <ReferenceLine y={assumptions.fire_target} stroke="var(--color-status-positive)" strokeDasharray="4 4" label={{ value: "FIRE target", fontSize: 10, fill: "var(--color-muted-foreground)" }} />
-                {form.target_retirement_date ? (
-                  <ReferenceLine x={new Date(form.target_retirement_date).getFullYear()} stroke="var(--color-primary)" strokeDasharray="4 4" label={{ value: "Retire", fontSize: 10, fill: "var(--color-muted-foreground)" }} />
-                ) : null}
+                <ReferenceLine y={fireDynamic.requiredCapital} stroke="var(--color-status-positive)" strokeDasharray="4 4" label={{ value: "FIRE target", fontSize: 10, fill: "var(--color-muted-foreground)" }} />
+                {milestones.map((m) => (
+                  <ReferenceLine key={`${m.label}-${m.year}`} x={m.year} stroke="var(--color-primary)" strokeDasharray="4 4" label={{ value: m.label, fontSize: 10, fill: "var(--color-muted-foreground)" }} />
+                ))}
                 <Line type="monotone" dataKey="value" stroke="var(--color-chart-1)" strokeWidth={2} dot={false} />
               </LineChart>
             </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Retirement Income Sources</CardTitle>
+            <CardDescription>How each engine contributes to sustainable retirement income.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {engineTiles.filter((e) => e.status !== "future").map((e) => (
+              <div key={e.id} className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
+                <div>
+                  <div className="font-medium">{e.label}</div>
+                  <div className="text-xs text-muted-foreground capitalize">{e.subtitle}</div>
+                </div>
+                <div className="text-right">
+                  <div className="tabular-nums font-medium">{e.projectedIncome > 0 ? formatCurrency(e.projectedIncome) : "—"}</div>
+                  <div className="text-[10px] text-muted-foreground">{e.status}</div>
+                </div>
+              </div>
+            ))}
           </CardContent>
         </Card>
 
