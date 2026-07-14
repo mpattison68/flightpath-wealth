@@ -7,6 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
+import { HelpCircle } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 
@@ -58,13 +60,14 @@ function SettingsPage() {
   return (
     <>
       <PageHeader title="Settings" description="Your assumptions drive every calculation." />
+      <TooltipProvider delayDuration={150}>
       <div className="grid gap-6 p-6 lg:grid-cols-2">
         <Card>
           <CardHeader><CardTitle className="text-base">Profile</CardTitle><CardDescription>How the app addresses you.</CardDescription></CardHeader>
           <CardContent className="space-y-3">
-            <Field label="Display name"><Input value={p.display_name ?? ""} onChange={(e) => setP({ ...p, display_name: e.target.value })} /></Field>
-            <Field label="Base currency"><Input value={p.base_currency} onChange={(e) => setP({ ...p, base_currency: e.target.value.toUpperCase().slice(0, 3) })} /></Field>
-            <Field label="Alternative currency (optional)">
+            <Field label="Display name" help="The name the app uses to greet you. Cosmetic only — has no effect on calculations."><Input value={p.display_name ?? ""} onChange={(e) => setP({ ...p, display_name: e.target.value })} /></Field>
+            <Field label="Base currency" help="ISO 4217 code (e.g. GBP) used as the reporting currency across the app. All holdings are converted to this currency using stored FX rates, and every KPI, chart and projection is expressed in it."><Input value={p.base_currency} onChange={(e) => setP({ ...p, base_currency: e.target.value.toUpperCase().slice(0, 3) })} /></Field>
+            <Field label="Alternative currency (optional)" help="A secondary ISO code (e.g. USD, EUR, ZAR) shown next to base-currency values on the Dashboard. Spot rate is fetched from Google Finance (with a Frankfurter fallback) and cached for a few minutes. Leave blank to hide.">
               <Input
                 placeholder="e.g. USD, EUR"
                 value={p.alt_currency ?? ""}
@@ -78,20 +81,38 @@ function SettingsPage() {
         <Card>
           <CardHeader><CardTitle className="text-base">Assumptions</CardTitle><CardDescription>The numbers behind every projection.</CardDescription></CardHeader>
           <CardContent className="space-y-3">
-            <Field label="Inflation %"><Input type="number" step="0.1" value={a.inflation_pct} onChange={(e) => setA({ ...a, inflation_pct: Number(e.target.value) })} /></Field>
-            <Field label="Real growth %"><Input type="number" step="0.1" value={a.real_growth_pct} onChange={(e) => setA({ ...a, real_growth_pct: Number(e.target.value) })} /></Field>
-            <Field label="Safe withdrawal rate %"><Input type="number" step="0.1" value={a.swr_pct} onChange={(e) => setA({ ...a, swr_pct: Number(e.target.value) })} /></Field>
-            <Field label="Life expectancy"><Input type="number" value={a.life_expectancy} onChange={(e) => setA({ ...a, life_expectancy: Number(e.target.value) })} /></Field>
-            <Field label="FIRE target (GBP)"><Input type="number" value={a.fire_target} onChange={(e) => setA({ ...a, fire_target: Number(e.target.value) })} /></Field>
-            <Field label="Liquid FIRE target (GBP)"><Input type="number" value={a.liquid_fire_target} onChange={(e) => setA({ ...a, liquid_fire_target: Number(e.target.value) })} /></Field>
+            <Field label="Inflation %" help="Expected long-run annual inflation rate. Used to discount future values to today's money in retirement and scenario projections. A higher number makes future goals look more expensive in real terms."><Input type="number" step="0.1" value={a.inflation_pct} onChange={(e) => setA({ ...a, inflation_pct: Number(e.target.value) })} /></Field>
+            <Field label="Real growth %" help="Expected annual portfolio return above inflation (i.e. real, not nominal). Drives the compounding curve in retirement projections and scenarios. Typical globally-diversified equity assumption is 3–5%."><Input type="number" step="0.1" value={a.real_growth_pct} onChange={(e) => setA({ ...a, real_growth_pct: Number(e.target.value) })} /></Field>
+            <Field label="Safe withdrawal rate %" help="The percentage of your portfolio you assume you can withdraw each year in retirement without running out. Used to derive your implied FIRE number (annual spend ÷ SWR). Classic figure is 4%; more conservative plans use 3–3.5%."><Input type="number" step="0.1" value={a.swr_pct} onChange={(e) => setA({ ...a, swr_pct: Number(e.target.value) })} /></Field>
+            <Field label="Life expectancy" help="Age you plan the portfolio to last until. Sets the end of the retirement projection horizon and affects sustainability / depletion calculations."><Input type="number" value={a.life_expectancy} onChange={(e) => setA({ ...a, life_expectancy: Number(e.target.value) })} /></Field>
+            <Field label="FIRE target (GBP)" help="Total net worth (all assets, including illiquid ones like property and pensions) at which you consider yourself financially independent. Drives the 'progress to FIRE' KPI on the Dashboard."><Input type="number" value={a.fire_target} onChange={(e) => setA({ ...a, fire_target: Number(e.target.value) })} /></Field>
+            <Field label="Liquid FIRE target (GBP)" help="The subset of your FIRE number that must be in liquid, drawable assets (investments, cash) — excluding property and locked pensions. Used to gauge whether you could actually retire today on accessible wealth."><Input type="number" value={a.liquid_fire_target} onChange={(e) => setA({ ...a, liquid_fire_target: Number(e.target.value) })} /></Field>
             <Button onClick={() => saveA.mutate()} disabled={saveA.isPending}>Save assumptions</Button>
           </CardContent>
         </Card>
       </div>
+      </TooltipProvider>
     </>
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div className="space-y-1.5"><Label className="text-xs">{label}</Label>{children}</div>;
+function Field({ label, help, children }: { label: string; help?: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center gap-1.5">
+        <Label className="text-xs">{label}</Label>
+        {help ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button type="button" aria-label={`About ${label}`} className="text-muted-foreground hover:text-foreground transition-colors">
+                <HelpCircle className="h-3.5 w-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-xs text-xs leading-relaxed">{help}</TooltipContent>
+          </Tooltip>
+        ) : null}
+      </div>
+      {children}
+    </div>
+  );
 }
