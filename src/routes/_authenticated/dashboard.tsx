@@ -363,3 +363,32 @@ function ReviewItem({
   );
   return to ? <Link to={to}>{inner}</Link> : inner;
 }
+
+function WorldSection({
+  title, description, world, currency, children,
+}: {
+  title: string;
+  description: string;
+  world: "wealth" | "lifestyle";
+  currency: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <span
+              aria-hidden
+              className={`h-4 w-[3px] rounded-full ${world === "wealth" ? "bg-world-wealth" : "bg-world-lifestyle"}`}
+            />
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-foreground">{title}</h2>
+          </div>
+          <p className="ml-3 mt-1 text-xs text-muted-foreground">{description}</p>
+        </div>
+        <WorldBadge world={world} currency={currency} />
+      </div>
+      {children}
+    </section>
+  );
+}
