@@ -15,6 +15,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { formatCurrency } from "@/lib/format";
 import { sumValue, allocation, type Holding } from "@/lib/finance/calculators";
+import { ImportHoldingsDialog } from "@/components/import-holdings-dialog";
 
 const holdingsQuery = queryOptions({ queryKey: ["holdings"], queryFn: () => listHoldings() });
 const snapshotsQuery = queryOptions({ queryKey: ["snapshots"], queryFn: () => listSnapshots() });
@@ -87,6 +88,7 @@ function PortfolioPage() {
         description="Your holdings, allocation and platform exposure."
         actions={
           <div className="flex gap-2">
+            <ImportHoldingsDialog />
             <Button variant="outline" size="sm" disabled={snap.isPending || holdings.length === 0} onClick={() => snap.mutate()}>
               <Camera className="mr-1.5 h-4 w-4" /> Snapshot
             </Button>
