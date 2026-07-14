@@ -148,6 +148,48 @@ export type Database = {
         }
         Relationships: []
       }
+      financial_engines: {
+        Row: {
+          created_at: string
+          ends_on: string | null
+          id: string
+          kind: string
+          label: string
+          metadata: Json
+          sort_order: number
+          starts_on: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          ends_on?: string | null
+          id?: string
+          kind: string
+          label: string
+          metadata?: Json
+          sort_order?: number
+          starts_on?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          ends_on?: string | null
+          id?: string
+          kind?: string
+          label?: string
+          metadata?: Json
+          sort_order?: number
+          starts_on?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       fx_rates: {
         Row: {
           as_of: string
@@ -247,6 +289,7 @@ export type Database = {
           currency: string
           enabled: boolean
           end_date: string | null
+          engine_id: string | null
           id: string
           inflation_behaviour: string
           kind: string
@@ -263,6 +306,7 @@ export type Database = {
           currency?: string
           enabled?: boolean
           end_date?: string | null
+          engine_id?: string | null
           id?: string
           inflation_behaviour?: string
           kind: string
@@ -279,6 +323,7 @@ export type Database = {
           currency?: string
           enabled?: boolean
           end_date?: string | null
+          engine_id?: string | null
           id?: string
           inflation_behaviour?: string
           kind?: string
@@ -289,7 +334,15 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "income_sources_engine_id_fkey"
+            columns: ["engine_id"]
+            isOneToOne: false
+            referencedRelation: "financial_engines"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       planning_assumption_history: {
         Row: {
@@ -338,12 +391,14 @@ export type Database = {
           category: string
           confidence: string
           created_at: string
+          depends_on: string[]
           description: string | null
           id: string
           key: string
           label: string
           last_reviewed_at: string | null
           review_due_at: string | null
+          review_frequency: string
           source: string | null
           unit: string | null
           updated_at: string
@@ -356,12 +411,14 @@ export type Database = {
           category: string
           confidence?: string
           created_at?: string
+          depends_on?: string[]
           description?: string | null
           id?: string
           key: string
           label: string
           last_reviewed_at?: string | null
           review_due_at?: string | null
+          review_frequency?: string
           source?: string | null
           unit?: string | null
           updated_at?: string
@@ -374,18 +431,62 @@ export type Database = {
           category?: string
           confidence?: string
           created_at?: string
+          depends_on?: string[]
           description?: string | null
           id?: string
           key?: string
           label?: string
           last_reviewed_at?: string | null
           review_due_at?: string | null
+          review_frequency?: string
           source?: string | null
           unit?: string | null
           updated_at?: string
           user_id?: string
           value_json?: Json | null
           value_numeric?: number | null
+        }
+        Relationships: []
+      }
+      planning_milestones: {
+        Row: {
+          achieved_on: string | null
+          created_at: string
+          id: string
+          kind: string
+          label: string
+          metadata: Json
+          notes: string | null
+          source: string
+          target_date: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          achieved_on?: string | null
+          created_at?: string
+          id?: string
+          kind: string
+          label: string
+          metadata?: Json
+          notes?: string | null
+          source?: string
+          target_date?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          achieved_on?: string | null
+          created_at?: string
+          id?: string
+          kind?: string
+          label?: string
+          metadata?: Json
+          notes?: string | null
+          source?: string
+          target_date?: string | null
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -455,15 +556,19 @@ export type Database = {
           currency: string
           current_value: number
           estimated_sale_date: string | null
+          estimated_tax: number
+          expected_sale_year: number | null
           id: string
           monthly_expenses: number | null
           monthly_rental_income: number | null
           mortgage_balance: number | null
           name: string
           notes: string | null
+          property_type: string
           purchase_date: string | null
           purchase_price: number | null
           role_in_plan: string | null
+          selling_costs_pct: number
           updated_at: string
           user_id: string
         }
@@ -472,15 +577,19 @@ export type Database = {
           currency?: string
           current_value: number
           estimated_sale_date?: string | null
+          estimated_tax?: number
+          expected_sale_year?: number | null
           id?: string
           monthly_expenses?: number | null
           monthly_rental_income?: number | null
           mortgage_balance?: number | null
           name: string
           notes?: string | null
+          property_type?: string
           purchase_date?: string | null
           purchase_price?: number | null
           role_in_plan?: string | null
+          selling_costs_pct?: number
           updated_at?: string
           user_id: string
         }
@@ -489,19 +598,97 @@ export type Database = {
           currency?: string
           current_value?: number
           estimated_sale_date?: string | null
+          estimated_tax?: number
+          expected_sale_year?: number | null
           id?: string
           monthly_expenses?: number | null
           monthly_rental_income?: number | null
           mortgage_balance?: number | null
           name?: string
           notes?: string | null
+          property_type?: string
           purchase_date?: string | null
           purchase_price?: number | null
           role_in_plan?: string | null
+          selling_costs_pct?: number
           updated_at?: string
           user_id?: string
         }
         Relationships: []
+      }
+      retirement_income_sources: {
+        Row: {
+          confidence: number
+          country: string | null
+          created_at: string
+          currency: string
+          enabled: boolean
+          end_date: string | null
+          engine_id: string | null
+          forecast_amount: number
+          id: string
+          indexation_method: string
+          indexation_rate: number | null
+          label: string
+          notes: string | null
+          probability: number
+          review_date: string | null
+          start_date: string | null
+          tax_status: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          confidence?: number
+          country?: string | null
+          created_at?: string
+          currency?: string
+          enabled?: boolean
+          end_date?: string | null
+          engine_id?: string | null
+          forecast_amount?: number
+          id?: string
+          indexation_method?: string
+          indexation_rate?: number | null
+          label: string
+          notes?: string | null
+          probability?: number
+          review_date?: string | null
+          start_date?: string | null
+          tax_status?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          confidence?: number
+          country?: string | null
+          created_at?: string
+          currency?: string
+          enabled?: boolean
+          end_date?: string | null
+          engine_id?: string | null
+          forecast_amount?: number
+          id?: string
+          indexation_method?: string
+          indexation_rate?: number | null
+          label?: string
+          notes?: string | null
+          probability?: number
+          review_date?: string | null
+          start_date?: string | null
+          tax_status?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "retirement_income_sources_engine_id_fkey"
+            columns: ["engine_id"]
+            isOneToOne: false
+            referencedRelation: "financial_engines"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       retirement_plans: {
         Row: {
@@ -674,6 +861,54 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      spending_categories: {
+        Row: {
+          annual_amount: number
+          created_at: string
+          currency: string
+          essential: boolean
+          id: string
+          inflation_key: string | null
+          key: string
+          label: string
+          notes: string | null
+          rollup: string
+          sort_order: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          annual_amount?: number
+          created_at?: string
+          currency?: string
+          essential?: boolean
+          id?: string
+          inflation_key?: string | null
+          key: string
+          label: string
+          notes?: string | null
+          rollup: string
+          sort_order?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          annual_amount?: number
+          created_at?: string
+          currency?: string
+          essential?: boolean
+          id?: string
+          inflation_key?: string | null
+          key?: string
+          label?: string
+          notes?: string | null
+          rollup?: string
+          sort_order?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       user_roles: {
         Row: {
