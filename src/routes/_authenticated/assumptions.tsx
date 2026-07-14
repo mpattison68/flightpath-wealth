@@ -5,7 +5,10 @@ import {
   listAssumptions,
   upsertAssumption,
   markAssumptionReviewed,
+  nextReviewDue,
+  type ReviewFrequency,
 } from "@/lib/assumptions.functions";
+import { relatedTo } from "@/lib/assumptions/dependencies";
 import { PageHeader } from "@/components/page-header";
 import {
   Accordion, AccordionContent, AccordionItem, AccordionTrigger,
@@ -87,6 +90,10 @@ const CONFIDENCE_TONE: Record<string, string> = {
   low: "bg-rose-500/10 text-rose-700 border-rose-500/30",
 };
 
+const FREQ_LABEL: Record<ReviewFrequency, string> = {
+  quarterly: "Quarterly", six_monthly: "Six-monthly", annually: "Annually", never: "Never",
+};
+
 function AssumptionRow({ row }: { row: Row }) {
   const qc = useQueryClient();
   const upsertFn = useServerFn(upsertAssumption);
@@ -98,6 +105,13 @@ function AssumptionRow({ row }: { row: Row }) {
   const [source, setSource] = useState(row.source ?? "");
   const [note, setNote] = useState("");
   const [open, setOpen] = useState(false);
+  const rowFreq = (row as { review_frequency?: ReviewFrequency }).review_frequency ?? "annually";
+  const [frequency, setFrequency] = useState<ReviewFrequency>(rowFreq);
+
+  const related = relatedTo(row.key);
+  const due = nextReviewDue(row.last_reviewed_at, frequency);
+  const isOverdue = due != null && due.getTime() < Date.now() && row.last_reviewed_at != null;
+  const neverReviewed = row.last_reviewed_at == null && frequency !== "never";
 
   const save = useMutation({
     mutationFn: () => upsertFn({ data: {
@@ -105,9 +119,16 @@ function AssumptionRow({ row }: { row: Row }) {
       value_numeric: value === "" ? null : Number(value),
       confidence, source: source || null,
       description: row.description, note: note || null,
+      review_frequency: frequency,
     } }),
     onSuccess: () => {
       toast.success(`${row.label} saved`);
+      if (related.length > 0) {
+        toast.message("Consider reviewing related assumptions", {
+          description: related.join(", "),
+          duration: 6000,
+        });
+      }
       setNote("");
       qc.invalidateQueries({ queryKey: ["assumptions"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
@@ -139,6 +160,11 @@ function AssumptionRow({ row }: { row: Row }) {
                 {row.confidence}
               </Badge>
               {row.isSeeded && <Badge variant="outline" className="text-[10px]">default</Badge>}
+              {(isOverdue || neverReviewed) && (
+                <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-700 border-amber-500/30">
+                  review due
+                </Badge>
+              )}
             </div>
             <span className="text-xs text-muted-foreground">{row.description}</span>
           </div>
@@ -168,10 +194,27 @@ function AssumptionRow({ row }: { row: Row }) {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5 md:col-span-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Review frequency</Label>
+              <Select value={frequency} onValueChange={(v: ReviewFrequency) => setFrequency(v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(FREQ_LABEL) as ReviewFrequency[]).map((f) => (
+                    <SelectItem key={f} value={f}>{FREQ_LABEL[f]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
               <Label className="text-xs">Source</Label>
               <Input placeholder="e.g. ONS, HL forecast, personal estimate" value={source} onChange={(e) => setSource(e.target.value)} />
             </div>
+            {related.length > 0 && (
+              <div className="md:col-span-4 rounded-md border border-dashed bg-muted/40 p-2 text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">Related assumptions:</span>{" "}
+                {related.join(", ")}
+              </div>
+            )}
             <div className="space-y-1.5 md:col-span-4">
               <Label className="text-xs">Change note (optional)</Label>
               <Textarea rows={2} placeholder="Why are you changing this?" value={note} onChange={(e) => setNote(e.target.value)} />
