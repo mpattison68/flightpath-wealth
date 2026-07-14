@@ -3,14 +3,16 @@ import { useSuspenseQuery, queryOptions, useQuery } from "@tanstack/react-query"
 import { getDashboardData } from "@/lib/dashboard.functions";
 import { getSpotRate } from "@/lib/fx.functions";
 import { listAssumptions, nextReviewDue, type ReviewFrequency } from "@/lib/assumptions.functions";
+import { listSpending } from "@/lib/spending.functions";
 import { PageHeader } from "@/components/page-header";
 import { KpiCard } from "@/components/kpi-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { WorldBadge } from "@/components/world-badge";
 import {
   sumValue, liquidValue, sustainableIncome, fireProgress, yearsBetween, allocation,
-  type Holding, type Assumptions,
+  toInvestment, type Holding, type Assumptions,
 } from "@/lib/finance/calculators";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, AreaChart, Area, XAxis, YAxis, CartesianGrid } from "recharts";
@@ -27,11 +29,17 @@ const assumptionsQuery = queryOptions({
   queryFn: () => listAssumptions(),
 });
 
+const spendingQuery = queryOptions({
+  queryKey: ["spending"],
+  queryFn: () => listSpending(),
+});
+
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({ meta: [{ title: "Dashboard — Wealth Flightpath" }] }),
   loader: ({ context }) => Promise.all([
     context.queryClient.ensureQueryData(dashboardQuery),
     context.queryClient.ensureQueryData(assumptionsQuery),
+    context.queryClient.ensureQueryData(spendingQuery),
   ]),
   component: DashboardPage,
 });
@@ -48,6 +56,7 @@ const DEFAULT_ASSUMPTIONS: Assumptions = {
 function DashboardPage() {
   const { data } = useSuspenseQuery(dashboardQuery);
   const { data: assumptionRows } = useSuspenseQuery(assumptionsQuery);
+  const { data: spending } = useSuspenseQuery(spendingQuery);
   const holdings = (data.holdings ?? []) as Holding[];
   const assumptions: Assumptions = {
     ...DEFAULT_ASSUMPTIONS,
@@ -66,13 +75,27 @@ function DashboardPage() {
   const fxRate = hasFx ? (fxQuery.data?.rate ?? null) : 1;
   const toTarget = (v: number) => (fxRate ? v * fxRate : v);
 
+  // Wealth World (Investment Currency) — portfolio + property.
   const total = sumValue(holdings);
   const liquid = liquidValue(holdings);
-  // Retirement metrics live in the Target Currency.
-  const sustainableTgt = toTarget(sustainableIncome(total, assumptions.swr_pct));
-  const fireTargetTgt = toTarget(assumptions.fire_target);
+  const propertyValue = (data.properties ?? []).reduce(
+    (s: number, p: { current_value?: number | string | null }) => s + Number(p.current_value ?? 0),
+    0,
+  );
+
+  // Lifestyle World (Target Currency) — spending, sustainable income, FIRE.
+  const swrPct = assumptions.swr_pct;
+  const annualLifestyleTgt = spending.reduce((s, r) => s + Number(r.annual_amount ?? 0), 0);
+  const sustainableTgt = toTarget(sustainableIncome(total, swrPct));
+  // Dynamic FIRE target: portfolio required to fund the lifestyle at SWR.
+  // Calculated in Target Currency, then translated to Investment Currency
+  // to measure progress against actual GBP-denominated wealth.
+  const fireTargetTgt = annualLifestyleTgt > 0
+    ? annualLifestyleTgt / (swrPct / 100)
+    : toTarget(assumptions.fire_target);
+  const fireTargetInv = fxRate ? toInvestment(fireTargetTgt, fxRate) : fireTargetTgt;
+  const fire = fireProgress(total, fireTargetInv);
   const liquidFireTargetTgt = toTarget(assumptions.liquid_fire_target);
-  const fire = fireProgress(toTarget(total), fireTargetTgt);
   const liquidFire = fireProgress(toTarget(liquid), liquidFireTargetTgt);
   const years = data.plan?.target_retirement_date
     ? Math.max(0, yearsBetween(new Date(), new Date(data.plan.target_retirement_date)))
@@ -106,7 +129,7 @@ function DashboardPage() {
     <>
       <PageHeader
         title="Dashboard"
-        description="Where you are today, and whether you're still on course."
+        description="Two worlds at a glance: the wealth you've built, and the retirement lifestyle it must fund."
         actions={
           <Button asChild variant="outline" size="sm">
             <Link to="/portfolio">Manage holdings</Link>
@@ -126,38 +149,76 @@ function DashboardPage() {
           </Card>
         ) : null}
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <KpiCard
-            label="Portfolio value"
-            value={formatCurrency(total, invCcy)}
-            hint={`${holdings.length} holdings · Investment currency`}
-          />
-          <KpiCard
-            label="FIRE progress"
-            value={formatPercent(fire)}
-            hint={`Target ${formatCurrency(fireTargetTgt, tgtCcy)}`}
-            tone={fire >= 100 ? "positive" : fire >= 60 ? "neutral" : "warning"}
-          />
-          <KpiCard
-            label="Liquid FIRE"
-            value={formatPercent(liquidFire)}
-            hint={`Liquid ${formatCurrency(liquid, invCcy)}`}
-          />
-          <KpiCard
-            label="Sustainable income"
-            value={formatCurrency(sustainableTgt, tgtCcy)}
-            hint={`At ${assumptions.swr_pct}% SWR · Target currency`}
-          />
-        </div>
+        <WorldSection
+          title="Wealth"
+          description="What you own today. Everything here is measured in your Investment Currency."
+          world="wealth"
+          currency={invCcy}
+        >
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <KpiCard
+              label="Investment portfolio"
+              value={formatCurrency(total, invCcy)}
+              hint={`${holdings.length} holdings`}
+            />
+            <KpiCard
+              label="Liquid portfolio"
+              value={formatCurrency(liquid, invCcy)}
+              hint={`${formatPercent(total > 0 ? (liquid / total) * 100 : 0)} of total`}
+            />
+            <KpiCard
+              label="Property"
+              value={formatCurrency(propertyValue, invCcy)}
+              hint={`${(data.properties ?? []).length} asset${(data.properties ?? []).length === 1 ? "" : "s"}`}
+            />
+            <KpiCard
+              label="Total wealth"
+              value={formatCurrency(total + propertyValue, invCcy)}
+              hint="Portfolio + property"
+            />
+          </div>
+        </WorldSection>
+
+        <WorldSection
+          title="Retirement Lifestyle"
+          description="What life must cost each year, and how well your wealth can fund it. Everything here is measured in your Target Currency."
+          world="lifestyle"
+          currency={tgtCcy}
+        >
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <KpiCard
+              label="Annual lifestyle"
+              value={formatCurrency(annualLifestyleTgt, tgtCcy)}
+              hint={`${formatCurrency(annualLifestyleTgt / 12, tgtCcy)} / month`}
+            />
+            <KpiCard
+              label="Sustainable income"
+              value={formatCurrency(sustainableTgt, tgtCcy)}
+              hint={`At ${swrPct}% SWR on today's portfolio`}
+            />
+            <KpiCard
+              label="FIRE progress"
+              value={formatPercent(fire)}
+              hint={`Target ${formatCurrency(fireTargetTgt, tgtCcy)}`}
+              tone={fire >= 100 ? "positive" : fire >= 60 ? "neutral" : "warning"}
+            />
+            <KpiCard
+              label="Liquid FIRE"
+              value={formatPercent(liquidFire)}
+              hint={`Liquid ${formatCurrency(toTarget(liquid), tgtCcy)}`}
+            />
+          </div>
+        </WorldSection>
 
         {hasFx ? (
-          <div className="text-xs text-muted-foreground">
+          <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+            Bridge between worlds ·{" "}
             {fxQuery.isLoading
-              ? `Fetching ${invCcy}/${tgtCcy} spot rate…`
+              ? `fetching ${invCcy}/${tgtCcy} spot rate…`
               : fxQuery.isError
-                ? `Could not load ${invCcy}/${tgtCcy} rate from Google Finance.`
+                ? `could not load ${invCcy}/${tgtCcy} rate.`
                 : fxRate
-                  ? `Spot: 1 ${invCcy} = ${fxRate.toFixed(4)} ${tgtCcy} (Google Finance)`
+                  ? `1 ${invCcy} = ${fxRate.toFixed(4)} ${tgtCcy} (Google Finance)`
                   : null}
           </div>
         ) : null}
@@ -165,8 +226,13 @@ function DashboardPage() {
         <div className="grid gap-4 lg:grid-cols-3">
           <Card className="lg:col-span-2">
             <CardHeader>
-              <CardTitle className="text-base">Portfolio over time</CardTitle>
-              <CardDescription>How is the portfolio trending?</CardDescription>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <CardTitle className="text-base">Portfolio over time</CardTitle>
+                  <CardDescription>How is the portfolio trending?</CardDescription>
+                </div>
+                <WorldBadge world="wealth" currency={invCcy} />
+              </div>
             </CardHeader>
             <CardContent className="h-72">
               {snapshots.length === 0 ? (
@@ -195,8 +261,13 @@ function DashboardPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Allocation by asset class</CardTitle>
-              <CardDescription>How is the portfolio spread?</CardDescription>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <CardTitle className="text-base">Allocation by asset class</CardTitle>
+                  <CardDescription>How is the portfolio spread?</CardDescription>
+                </div>
+                <WorldBadge world="wealth" currency={invCcy} />
+              </div>
             </CardHeader>
             <CardContent className="h-72">
               {byClass.length === 0 ? (
