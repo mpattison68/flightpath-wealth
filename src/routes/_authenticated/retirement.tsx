@@ -11,6 +11,7 @@ import { assumptionMap, get as getA } from "@/lib/assumptions/values";
 import { investmentCurrency, targetCurrency, needsFx } from "@/lib/currency";
 import { PageHeader } from "@/components/page-header";
 import { KpiCard } from "@/components/kpi-card";
+import { WorldBadge } from "@/components/world-badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -205,11 +206,21 @@ function RetirementPage() {
 
   return (
     <>
-      <PageHeader title="Retirement Flightpath" description="Your journey to retirement, continuously monitored." />
+      <PageHeader
+        title="Retirement Flightpath"
+        description="The bridge between your Wealth World and your Lifestyle World. Every number below asks the same question: can Investment-Currency wealth keep funding a Target-Currency lifestyle?"
+        actions={
+          <div className="flex items-center gap-2">
+            <WorldBadge world="wealth" currency={invCcy} />
+            <span className="text-xs text-muted-foreground">→</span>
+            <WorldBadge world="lifestyle" currency={tgtCcy} />
+          </div>
+        }
+      />
       <div className="space-y-6 p-6">
         {hasFx ? (
-          <div className="text-xs text-muted-foreground">
-            Wealth is held in <strong>{invCcy}</strong>; retirement is planned in <strong>{tgtCcy}</strong>.
+          <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+            Wealth is <em>accumulated</em> in <strong>{invCcy}</strong> and <em>consumed</em> in <strong>{tgtCcy}</strong>.
             {fxQuery.data ? ` Spot: 1 ${invCcy} = ${fx.toFixed(4)} ${tgtCcy}.` : fxQuery.isLoading ? " Fetching FX…" : ""}
           </div>
         ) : null}
@@ -254,7 +265,26 @@ function RetirementPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Purchasing Power (RPPI)</CardTitle>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <CardTitle className="text-base">Retirement Purchasing Power</CardTitle>
+                <CardDescription>
+                  The primary retirement metric. Success is measured in {tgtCcy} purchasing power — not {invCcy} portfolio growth.
+                </CardDescription>
+              </div>
+              <WorldBadge world="lifestyle" currency={tgtCcy} />
+            </div>
+          </CardHeader>
+          <CardContent className="grid gap-3 sm:grid-cols-3">
+            <KpiCard label="RPPI at retirement" value={rppiValue > 0 ? `${rppiValue.toFixed(2)}×` : "—"} hint={`${years.toFixed(1)}y · ${equityReal}% real · ${fxDriftPct}% fx · ${targetInflationPct}% infl`} tone={rppiValue >= 1 ? "positive" : "warning"} />
+            <KpiCard label={`FIRE target in ${invCcy}`} value={formatCurrency(requiredCapitalInv, invCcy)} hint={`= ${formatCurrency(fireDynamic.requiredCapital, tgtCcy)} at today's spot`} />
+            <KpiCard label={`Portfolio in ${tgtCcy}`} value={formatCurrency(totalInv * fx, tgtCcy)} hint="Today's spot — the lifestyle it could fund now" />
+          </CardContent>
+        </Card>
+
+        <Card style={{ display: "none" }}>
+          <CardHeader>
+            <CardTitle className="text-base">_deprecated</CardTitle>
             <CardDescription>
               How much {tgtCcy} spending each unit of {invCcy} capital will fund after growth, currency drift and target-country inflation.
             </CardDescription>
