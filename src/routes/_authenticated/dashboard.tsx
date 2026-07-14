@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useSuspenseQuery, queryOptions } from "@tanstack/react-query";
+import { useSuspenseQuery, queryOptions, useQuery } from "@tanstack/react-query";
 import { getDashboardData } from "@/lib/dashboard.functions";
+import { getSpotRate } from "@/lib/fx.functions";
 import { PageHeader } from "@/components/page-header";
 import { KpiCard } from "@/components/kpi-card";
 import { Button } from "@/components/ui/button";
@@ -41,6 +42,17 @@ function DashboardPage() {
     ...((data.settings?.assumptions as object) ?? {}),
   };
   const currency = "GBP";
+  const altCurrency = (data.profile as { alt_currency?: string | null } | null)?.alt_currency || null;
+
+  const fxQuery = useQuery({
+    queryKey: ["fx-alt", currency, altCurrency],
+    queryFn: () => getSpotRate({ data: { from: currency, to: altCurrency! } }),
+    enabled: !!altCurrency && altCurrency !== currency,
+    staleTime: 5 * 60 * 1000,
+  });
+  const fxRate = fxQuery.data?.rate ?? null;
+  const showAlt = !!altCurrency && !!fxRate;
+  const alt = (v: number) => (showAlt ? ` · ${formatCurrency(v * (fxRate as number), altCurrency as string)}` : "");
 
   const total = sumValue(holdings);
   const liquid = liquidValue(holdings);
@@ -82,7 +94,11 @@ function DashboardPage() {
         ) : null}
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <KpiCard label="Portfolio value" value={formatCurrency(total, currency)} hint={`${holdings.length} holdings`} />
+          <KpiCard
+            label="Portfolio value"
+            value={formatCurrency(total, currency)}
+            hint={`${holdings.length} holdings${alt(total)}`}
+          />
           <KpiCard
             label="FIRE progress"
             value={formatPercent(fire)}
@@ -92,14 +108,26 @@ function DashboardPage() {
           <KpiCard
             label="Liquid FIRE"
             value={formatPercent(liquidFire)}
-            hint={`Liquid ${formatCurrency(liquid, currency)}`}
+            hint={`Liquid ${formatCurrency(liquid, currency)}${alt(liquid)}`}
           />
           <KpiCard
             label="Sustainable income"
             value={formatCurrency(sustainable, currency)}
-            hint={`At ${assumptions.swr_pct}% SWR`}
+            hint={`At ${assumptions.swr_pct}% SWR${alt(sustainable)}`}
           />
         </div>
+
+        {altCurrency ? (
+          <div className="text-xs text-muted-foreground">
+            {fxQuery.isLoading
+              ? `Fetching ${currency}/${altCurrency} spot rate…`
+              : fxQuery.isError
+                ? `Could not load ${currency}/${altCurrency} rate from Google Finance.`
+                : fxRate
+                  ? `Spot: 1 ${currency} = ${fxRate.toFixed(4)} ${altCurrency} (Google Finance)`
+                  : null}
+          </div>
+        ) : null}
 
         <div className="grid gap-4 lg:grid-cols-3">
           <Card className="lg:col-span-2">
