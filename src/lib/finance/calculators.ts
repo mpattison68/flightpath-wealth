@@ -92,3 +92,34 @@ export function readinessScore(params: {
     : 100;
   return Math.round(0.4 * fire + 0.6 * incomeCover);
 }
+
+// -------- Dynamic FIRE ---------------------------------------------------
+// FIRE capital is what the portfolio must supply after guaranteed and
+// expected income streams have covered part of target spending.
+
+export type DynamicFireInputs = {
+  targetSpending: number;      // annual, real, base currency
+  guaranteedIncome: number;    // annual, real (state pension, annuities, confirmed rental)
+  expectedIncome: number;      // annual, real, probability-weighted (consulting, uncertain rental)
+  swrPct: number;
+};
+
+export type DynamicFireResult = {
+  targetSpending: number;
+  guaranteedIncome: number;
+  expectedIncome: number;
+  requiredPortfolioIncome: number;
+  requiredCapital: number;
+};
+
+export function dynamicFireTarget(i: DynamicFireInputs): DynamicFireResult {
+  const required = Math.max(0, i.targetSpending - i.guaranteedIncome - i.expectedIncome);
+  const capital = i.swrPct > 0 ? required / (i.swrPct / 100) : 0;
+  return {
+    targetSpending: i.targetSpending,
+    guaranteedIncome: i.guaranteedIncome,
+    expectedIncome: i.expectedIncome,
+    requiredPortfolioIncome: required,
+    requiredCapital: capital,
+  };
+}

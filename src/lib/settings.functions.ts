@@ -48,3 +48,18 @@ export const updateProfile = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { ok: true };
   });
+
+const UserSettingsInput = z.object({
+  primary_spending_currency: z.string().min(3).max(3).nullable().optional(),
+});
+
+export const updateUserSettings = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => UserSettingsInput.parse(input))
+  .handler(async ({ data, context }) => {
+    const { error } = await context.supabase
+      .from("user_settings")
+      .upsert({ user_id: context.userId, ...data });
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });

@@ -1,221 +1,67 @@
+## Phase 2 Architecture Review — Implementation Plan
 
-# Wealth Flightpath — Architecture Consolidation
-
-Goal: stop adding features. Restructure what exists so the four questions
-("Where am I today? On track? What changed? What next?") map cleanly to
-four distinct concepts in the codebase: **Current Reality**, **App
-Settings**, **Planning Assumptions**, **Scenarios**. Preserve all existing
-functionality; migrate data forward; no user-visible regressions.
-
-The additional "master data model" suggestion is folded in: entities
-(assets/holdings, properties, income sources, pensions, assumptions) become
-canonical rows in a single graph. Every module — dashboard, retirement,
-scenarios, AI, future tax/estate — reads from that graph. This is the
-architectural spine.
+A large, coherent set of changes. I'll deliver them in **four staged migrations + code batches** so each stage is reviewable and reversible. Nothing here rebuilds existing architecture — every change extends the "single source of truth" model already in place (`planning_assumptions`, `scenario_overrides`, pure calculators).
 
 ---
 
-## 1. Conceptual model (single source of truth)
+### Stage A — Data model foundations (one migration)
 
-```text
-                 ┌──────────────────────┐
-                 │  Current Reality     │  facts, dated
-                 │  (entities + snaps)  │
-                 └──────────┬───────────┘
-                            │
-             ┌──────────────┴──────────────┐
-             │                             │
-   ┌─────────▼─────────┐         ┌─────────▼─────────┐
-   │ Planning          │         │ App Settings      │
-   │ Assumptions       │         │ (theme, currency  │
-   │ (baseline, one    │         │  display, AI cfg) │
-   │  row per key)     │         └───────────────────┘
-   └─────────┬─────────┘
-             │
-   ┌─────────▼─────────┐
-   │ Scenarios         │  store ONLY overrides
-   │ (sparse diffs on  │  vs baseline assumptions
-   │  baseline)        │
-   └─────────┬─────────┘
-             │
-   ┌─────────▼─────────┐
-   │ Retirement Engine │  pure fn: (reality, assumptions, overrides) → results
-   └─────────┬─────────┘
-             │
-   ┌─────────▼─────────┐
-   │ Dashboard · AI ·  │  read-only consumers
-   │ Reports · Reviews │
-   └───────────────────┘
-```
+New tables and columns, all following existing conventions (RLS scoped to `auth.uid()`, GRANTs, `updated_at` triggers):
 
-Rules that fall out of this:
-- Scenarios never mutate baseline assumptions.
-- AI never computes numbers — it consumes engine output as JSON.
-- Every asset/property/income/pension exists once, referenced everywhere.
+- `financial_engines` — canonical list of income engines per user (`kind`: portfolio | property | state_pension | private_pension | consulting | rental | annuity, `label`, `status`: active/planned/future, `starts_on`, `ends_on`, `metadata jsonb`). Seeds one row per engine on first load.
+- `retirement_income_sources` — per-engine income stream detail (`engine_id`, `gross_amount`, `currency`, `indexation_method`, `confidence`, `country`, `review_date`). Replaces free-form `income_sources` usage going forward; existing rows migrated in-place with an `engine_id` FK (nullable during transition).
+- `spending_categories` — 13 categories from the brief, each tagged `rollup`: core | lifestyle, `essential` boolean. Seeded per user.
+- `planning_milestones` — `kind`, `label`, `target_date`, `achieved_on`, `source` (derived vs manual). Derived milestones (FIRE achieved, Mortgage cleared, etc.) computed on read; manual ones stored.
+- `property_assets` — add `property_type` (primary/investment/holiday/rental), `expected_sale_year`, `selling_costs_pct`, `estimated_tax`, `mortgage_balance`, `expected_net_proceeds` (computed).
+- `planning_assumptions` — add `review_frequency` (quarterly/six_monthly/annually/never), `next_review_at` (computed from `last_reviewed_at + frequency`), `depends_on text[]` (keys of related assumptions).
+- `user_settings` — add `primary_spending_currency` (already partially present per Stage 1 note; verify + expose in Settings).
 
----
+### Stage B — Assumption intelligence
 
-## 2. Data-model changes
+- **Dependency graph** in `src/lib/assumptions/dependencies.ts` — static map of key → related keys (retirement_age → [state_pension_start, consulting_start/end, property_sale_year, planning_horizon]; sa_inflation → [healthcare_inflation, gbp_zar, spending_*]; property_sale_year → [property_value, mortgage, selling_costs, estimated_tax]; portfolio_return → [swr, planning_horizon]).
+- On assumption save: show a toast + inline "Related assumptions to review" panel with one-click "Mark reviewed" per dependent.
+- **Review frequency** control added to each assumption row; badge on rows past due.
 
-New / renamed tables (all in same migration batch, with GRANTs + RLS per
-existing pattern):
+### Stage C — Retirement engine rewrite (pure calculators, no UI churn)
 
-- `planning_assumptions` — one row per assumption key, per user. Columns:
-  `key` (enum, e.g. `inflation.uk`, `growth.equity_real`, `retirement.target_age`,
-  `spending.core`, `property.sale_year`, `state_pension.amount`, …),
-  `value_numeric`, `value_json` (for structured ones), `unit`, `confidence`
-  (`high|medium|low`), `source`, `description`, `last_reviewed_at`,
-  `review_due_at`, `ai_commentary`.
-- `planning_assumption_history` — append-only change log
-  (`assumption_id, old_value, new_value, changed_at, note`).
-- `scenario_overrides` — replaces the current "clone assumptions JSON"
-  approach. Columns: `scenario_id, assumption_key, value_numeric,
-  value_json, note`. Sparse.
-- `app_settings` — narrow table for pure app config
-  (`theme, base_currency, alt_currency, ai_personality, dashboard_layout`).
-  Migrated from current `user_settings` + `profiles` split; planning-shaped
-  fields move out into `planning_assumptions`.
+- `src/lib/finance/engines.ts` — one function per engine kind returning `{ year, gross, net, currency }[]` streams.
+- `src/lib/finance/retirement-engine.ts` — composes engine streams + spending needs into:
+  - `guaranteedIncome(year)` (state pension + annuities + confirmed rental)
+  - `expectedIncome(year)` (adds probability-weighted consulting)
+  - `requiredPortfolioIncome = targetSpending − guaranteedIncome − expectedIncome`
+  - `dynamicFireTarget = requiredPortfolioIncome / SWR` (replaces static `fire_target` / `liquid_fire_target` assumptions — old keys kept as manual overrides but hidden by default).
+- Dashboard, Retirement, Scenarios read these instead of static assumption values. Static keys deprecated in the assumptions UI with a "Now calculated" pill linking to the source inputs.
 
-Kept as-is (already canonical): `holdings`, `property_assets`,
-`income_sources`, `retirement_plans` (demoted to "profile + target date"
-only — the numeric assumptions inside it migrate to `planning_assumptions`),
-`valuation_snapshots`, `snapshot_holdings`, `documents`, `scenarios`,
-`ai_*`, `fx_rates`, `user_roles`.
+### Stage D — UI surfaces (progressive disclosure, no new nav noise)
 
-Migration: read current `user_settings.assumptions` JSON + relevant
-`retirement_plans` fields and seed one `planning_assumptions` row per key
-per user. Then drop the JSON blob.
+- **Settings** — add `Primary Spending Currency` field between Base and Alternative currency, with tooltip explaining its purpose.
+- **Dashboard** — one new card: **Review Centre**. Compact list: Assumptions due (n), Portfolio review due, Property valuation due, Tax review due (placeholder), Estate review (placeholder), Investment review due. Each item links to its module. Uses existing card styling.
+- **Retirement page** — three additions inside existing layout, no new routes:
+  1. **Engines strip** above KPIs — one small tile per active engine showing its projected annual contribution at retirement.
+  2. **Timeline** below the flightpath chart — horizontal line with milestone markers (property sale, retirement, consulting start/end, state pension, FIRE achieved). Uses recharts scatter on a hidden axis for consistency.
+  3. **Dynamic FIRE target** shown as calculated value with breakdown tooltip (spending − guaranteed − expected → required capital).
+- **New route `/_authenticated/spending`** (added to sidebar under Retirement group) — the 13 categories, grouped by rollup, with Core/Lifestyle/Total totals. Same accordion pattern as Assumptions.
+- **Property page** (existing) — add property_type selector and the new sale-planning fields; expected_net_proceeds shown live.
+- **Retirement Income section** — new subsection on the Retirement page (not a new route) listing income sources grouped by engine.
+
+### Stage E — Future-proofing (no user-visible change)
+
+- `src/modules/registry.ts` — declare `tax`, `estate`, `insurance`, `healthcare`, `documents`, `committee`, `adviser` as `status: "planned"` with target engine mappings. Registry already supports this pattern.
+- Add `src/lib/finance/README.md` documenting the engine contract so future modules plug in without rework.
 
 ---
 
-## 3. Code reorganisation
+### What I will NOT do
 
-```text
-src/lib/
-  reality/        # queries over canonical entity tables (holdings, property, income, pensions, snapshots)
-  assumptions/    # CRUD + confidence + history for planning_assumptions
-  scenarios/      # CRUD + override merge (baseline ⊕ overrides → resolved set)
-  engine/         # pure calculators: projection, RPPI, FIRE, confidence scores
-  ai/             # gateway client + prompt templates; consumes engine output only
-  settings/       # app_settings only (theme/currency-display/AI cfg)
-```
+- No visual redesign, no new global navigation, no colour changes.
+- No AI logic changes (still summarisation only).
+- No removal of existing assumption keys — deprecated ones stay readable so scenarios/history remain valid.
+- No implementation of Tax, Estate, Insurance, Healthcare, Document Intelligence, Committee, or Adviser modules — only registry entries.
 
-- `src/lib/finance/calculators.ts` → `src/lib/engine/` (split by concern).
-- Existing `settings.functions.ts` splits into `settings.functions.ts`
-  (app settings) and `assumptions.functions.ts` (planning).
-- `retirement.functions.ts` becomes a thin caller of `engine/`.
-- Dedup: one `KpiCard`, one `ChartShell`, one number-formatter, one
-  currency-conversion helper. Audit and remove duplicates.
+### Order of execution
 
-Naming pass: `plan` (retirement profile) vs `assumption` (single value) vs
-`scenario` (override set) — enforced consistently in table names, server
-fns, and UI copy.
+1. Stage A migration (single SQL) → wait for approval.
+2. Stages B–E code batches in that order, each verified with a build before moving on.
+3. Update the draft manual and regenerate the PDF at the end.
 
----
-
-## 4. Retirement engine (pure)
-
-Signature:
-```ts
-runProjection({
-  reality: RealitySnapshot,          // assets + income + property today
-  baseline: ResolvedAssumptions,     // all planning assumptions
-  overrides?: ScenarioOverrides,     // sparse
-}): ProjectionResult
-```
-Returns: year-by-year portfolio + income + spending in nominal and real
-terms, sustainable income, depletion year, FIRE %, **RPPI** (Retirement
-Purchasing Power Index = real sustainable income ÷ target real spend,
-FX-adjusted for primary spending currency), retirement confidence score,
-and assumption-confidence score (weighted avg of confidence tags on the
-assumptions the result depends on most).
-
-All existing calculators are replaced by / wrapped inside this engine so
-Dashboard, Retirement, and Scenarios all call the same function.
-
----
-
-## 5. UI changes
-
-- **Dashboard**: unchanged in spirit — today's position only. Adds RPPI
-  card and Assumption-Confidence badge next to Retirement Confidence. Any
-  KPI derived from assumptions gets a small "based on assumptions" tag
-  linking to the Assumptions Centre.
-- **Settings** page: slimmed to true app settings only (theme, display
-  currency, alt currency, AI personality). Planning fields removed with an
-  inline notice: "Moved to Planning Assumptions".
-- **Planning Assumptions Centre** (new route `/assumptions`): grouped
-  accordion (Inflation, Investment, Currency, Retirement, Spending,
-  Property, State Pension, Consulting). Each row: value, unit, confidence
-  pill, last-reviewed, review-due, source, description, AI commentary,
-  history drawer. Bulk "mark reviewed" action.
-- **Scenarios**: rebuilt as override editor. Left column = baseline value,
-  right column = override (empty = inherit). Impact summary + comparison
-  vs baseline + AI commentary. No more assumption cloning.
-- **Retirement**: keeps target-date/profile fields; numeric knobs move to
-  Assumptions.
-- **Nav**: add Assumptions; keep Scenarios; everything else unchanged.
-
-Every chart keeps its one-line caption. Every number stays clickable for
-explanation (existing pattern extended).
-
----
-
-## 6. AI boundaries (unchanged principle, tightened wiring)
-
-AI receives structured JSON from `engine/` + `reality/` + `assumptions/`.
-Prompt templates centralised under `src/lib/ai/prompts/`. New commentary
-targets: per-assumption (`ai_commentary` column), per-scenario, quarterly
-review. No AI code path calls a calculator directly.
-
----
-
-## 7. What is explicitly NOT in this refactor
-
-Tax, Estate, Insurance, Healthcare, Currency Planning, Investment
-Committee, Document Intelligence, Goal Planning, Retirement Checklists.
-The schema and module registry leave room for them; no UI or logic ships.
-
-Document library stays as it is today; AI-over-documents (RAG) is deferred.
-
-Multi-currency spending buckets are supported by the assumption schema
-(spending keys can carry a currency) but no new spending UI ships beyond
-what's needed to edit the assumptions.
-
----
-
-## 8. Delivery order (single PR, staged commits)
-
-1. Migration: new tables + backfill from existing JSON/settings + GRANTs + RLS.
-2. `src/lib/engine/` + `assumptions/` + `scenarios/` server fns; unit-test
-   the engine against current dashboard/retirement numbers to prove parity.
-3. Refactor Dashboard + Retirement + Scenarios to call the engine.
-4. Ship Assumptions Centre UI; slim Settings; rebuild Scenario editor.
-5. Dedup pass (components, formatters, fx helpers); rename pass.
-6. Typecheck + manual walkthrough of every existing screen; confirm no
-   regressions in KPIs, retirement projection, import flow, FX display.
-
----
-
-## 9. Open questions before I start
-
-1. **RPPI target currency.** Should RPPI be expressed in your primary
-   *spending* currency (which may differ from base reporting currency
-   GBP)? I'd add a `primary_spending_currency` app setting and default it
-   to GBP.
-2. **State Pension / Consulting** — currently modelled in `income_sources`.
-   Keep them there (canonical entity) and let the relevant *assumptions*
-   (indexation, probability, start date) live in `planning_assumptions`
-   referencing the source id? That's my recommendation — keeps the
-   "entity exists once" rule intact.
-3. **Migration risk.** Backfilling assumptions from the existing JSON
-   blob is lossy if you've customised anything unusual. OK for me to log
-   the pre-migration blob into `planning_assumption_history` as the
-   initial "source" so nothing is lost?
-4. **Scope check.** Is it acceptable that Scenarios' UI changes shape
-   (override-only editor) — existing saved scenarios would be migrated to
-   overrides where they differ from the new baseline, but the editing UX
-   is different?
-
-Reply with answers (or "go" to accept my recommendations on all four) and
-I'll execute the plan in order.
+Reply **"go"** to run the Stage A migration, or tell me which stages to reorder / drop.

@@ -2,26 +2,36 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useSuspenseQuery, queryOptions, useQuery } from "@tanstack/react-query";
 import { getDashboardData } from "@/lib/dashboard.functions";
 import { getSpotRate } from "@/lib/fx.functions";
+import { listAssumptions, nextReviewDue, type ReviewFrequency } from "@/lib/assumptions.functions";
 import { PageHeader } from "@/components/page-header";
 import { KpiCard } from "@/components/kpi-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import {
   sumValue, liquidValue, sustainableIncome, fireProgress, yearsBetween, allocation,
   type Holding, type Assumptions,
 } from "@/lib/finance/calculators";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, AreaChart, Area, XAxis, YAxis, CartesianGrid } from "recharts";
-import { Plane } from "lucide-react";
+import { Plane, CalendarClock, ChevronRight } from "lucide-react";
 
 const dashboardQuery = queryOptions({
   queryKey: ["dashboard"],
   queryFn: () => getDashboardData(),
 });
 
+const assumptionsQuery = queryOptions({
+  queryKey: ["assumptions"],
+  queryFn: () => listAssumptions(),
+});
+
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({ meta: [{ title: "Dashboard — Wealth Flightpath" }] }),
-  loader: ({ context }) => context.queryClient.ensureQueryData(dashboardQuery),
+  loader: ({ context }) => Promise.all([
+    context.queryClient.ensureQueryData(dashboardQuery),
+    context.queryClient.ensureQueryData(assumptionsQuery),
+  ]),
   component: DashboardPage,
 });
 
@@ -36,6 +46,7 @@ const DEFAULT_ASSUMPTIONS: Assumptions = {
 
 function DashboardPage() {
   const { data } = useSuspenseQuery(dashboardQuery);
+  const { data: assumptionRows } = useSuspenseQuery(assumptionsQuery);
   const holdings = (data.holdings ?? []) as Holding[];
   const assumptions: Assumptions = {
     ...DEFAULT_ASSUMPTIONS,
@@ -68,6 +79,24 @@ function DashboardPage() {
     date: new Date(s.snapshot_date).toLocaleDateString("en-GB", { month: "short", day: "numeric" }),
     value: Number(s.total_value),
   }));
+
+  // ---- Review Centre --------------------------------------------------
+  const now = Date.now();
+  const overdueAssumptions = assumptionRows.filter((a) => {
+    const freq = (a as { review_frequency?: ReviewFrequency }).review_frequency ?? "annually";
+    if (freq === "never") return false;
+    if (!a.last_reviewed_at) return true;
+    const due = nextReviewDue(a.last_reviewed_at, freq);
+    return due != null && due.getTime() < now;
+  });
+  const latestSnapshotDate = data.snapshots?.[0]?.snapshot_date
+    ? new Date(data.snapshots[0].snapshot_date)
+    : null;
+  const snapshotAgeDays = latestSnapshotDate
+    ? Math.floor((now - latestSnapshotDate.getTime()) / (86_400_000))
+    : null;
+  const portfolioReviewDue = snapshotAgeDays == null || snapshotAgeDays > 90;
+  const propertyReviewDue = overdueAssumptions.some((a) => a.category === "Property");
 
   return (
     <>
@@ -203,7 +232,59 @@ function DashboardPage() {
             )}
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+            <div>
+              <CardTitle className="text-base flex items-center gap-2">
+                <CalendarClock className="h-4 w-4" /> Review Centre
+              </CardTitle>
+              <CardDescription>Your periodic planning checklist.</CardDescription>
+            </div>
+          </CardHeader>
+          <CardContent className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            <ReviewItem
+              label="Planning assumptions"
+              status={overdueAssumptions.length > 0 ? `${overdueAssumptions.length} due` : "Up to date"}
+              due={overdueAssumptions.length > 0}
+              to="/assumptions"
+            />
+            <ReviewItem
+              label="Portfolio snapshot"
+              status={snapshotAgeDays == null ? "No snapshot yet" : `${snapshotAgeDays} days old`}
+              due={portfolioReviewDue}
+              to="/portfolio"
+            />
+            <ReviewItem
+              label="Property valuation"
+              status={propertyReviewDue ? "Review property assumptions" : "Up to date"}
+              due={propertyReviewDue}
+              to="/assumptions"
+            />
+            <ReviewItem label="Tax review" status="Module planned" muted />
+            <ReviewItem label="Estate review" status="Module planned" muted />
+            <ReviewItem label="Investment committee" status="Module planned" muted />
+          </CardContent>
+        </Card>
       </div>
     </>
   );
+}
+
+function ReviewItem({
+  label, status, due, muted, to,
+}: { label: string; status: string; due?: boolean; muted?: boolean; to?: string }) {
+  const inner = (
+    <div className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
+      <div>
+        <div className="font-medium">{label}</div>
+        <div className={`text-xs ${muted ? "text-muted-foreground/70" : "text-muted-foreground"}`}>{status}</div>
+      </div>
+      <div className="flex items-center gap-2">
+        {due ? <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-700 border-amber-500/30">due</Badge> : null}
+        {to ? <ChevronRight className="h-4 w-4 text-muted-foreground" /> : null}
+      </div>
+    </div>
+  );
+  return to ? <Link to={to}>{inner}</Link> : inner;
 }
