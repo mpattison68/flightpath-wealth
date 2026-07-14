@@ -258,17 +258,20 @@ export function ImportHoldingsDialog() {
               <div className="text-xs font-medium text-muted-foreground mb-1.5">Totals by currency (selected)</div>
               <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm tabular-nums">
                 {Object.entries(
-                  rows.filter((r) => r._keep).reduce<Record<string, number>>((acc, r) => {
+                  rows.filter((r) => r._keep).reduce<Record<string, { count: number; total: number }>>((acc, r) => {
                     const c = (r.currency || "GBP").toUpperCase();
-                    acc[c] = (acc[c] ?? 0) + (Number(r.value) || 0);
+                    if (!acc[c]) acc[c] = { count: 0, total: 0 };
+                    acc[c].count += 1;
+                    acc[c].total += Number(r.value) || 0;
                     return acc;
                   }, {}),
-                ).sort(([a], [b]) => a.localeCompare(b)).map(([ccy, total]) => (
+                ).sort(([a], [b]) => a.localeCompare(b)).map(([ccy, { count, total }]) => (
                   <div key={ccy}>
                     <span className="text-muted-foreground mr-1.5">{ccy}</span>
                     <span className="font-medium">
                       {new Intl.NumberFormat("en-GB", { style: "currency", currency: ccy, maximumFractionDigits: 0 }).format(total)}
                     </span>
+                    <span className="text-muted-foreground ml-1.5">· {count} item{count === 1 ? "" : "s"}</span>
                   </div>
                 ))}
                 {rows.filter((r) => r._keep).length === 0 && (
