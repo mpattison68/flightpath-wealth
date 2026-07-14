@@ -35,6 +35,7 @@ export const updateAssumptions = createServerFn({ method: "POST" })
 const ProfileInput = z.object({
   display_name: z.string().nullable().optional(),
   base_currency: z.string().min(3).max(3),
+  alt_currency: z.string().min(3).max(3).nullable().optional(),
 });
 
 export const updateProfile = createServerFn({ method: "POST" })
