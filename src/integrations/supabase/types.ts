@@ -776,34 +776,108 @@ export type Database = {
           },
         ]
       }
-      scenarios: {
+      scenario_stress_tests: {
         Row: {
-          assumptions: Json
           created_at: string
-          description: string | null
           id: string
-          name: string
+          label: string
+          overrides: Json
+          preset_key: string
           result: Json | null
+          scenario_id: string
           updated_at: string
           user_id: string
         }
         Insert: {
-          assumptions?: Json
           created_at?: string
-          description?: string | null
           id?: string
-          name: string
+          label: string
+          overrides?: Json
+          preset_key: string
           result?: Json | null
+          scenario_id: string
           updated_at?: string
           user_id: string
         }
         Update: {
+          created_at?: string
+          id?: string
+          label?: string
+          overrides?: Json
+          preset_key?: string
+          result?: Json | null
+          scenario_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scenario_stress_tests_scenario_id_fkey"
+            columns: ["scenario_id"]
+            isOneToOne: false
+            referencedRelation: "scenarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      scenarios: {
+        Row: {
+          ai_details: Json | null
+          ai_summary: string | null
+          assumptions: Json
+          created_at: string
+          description: string | null
+          id: string
+          is_baseline: boolean
+          last_run_at: string | null
+          name: string
+          notes: string | null
+          probability: number | null
+          projection: Json | null
+          result: Json | null
+          scenario_type: string
+          status: string
+          subtype: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ai_details?: Json | null
+          ai_summary?: string | null
           assumptions?: Json
           created_at?: string
           description?: string | null
           id?: string
-          name?: string
+          is_baseline?: boolean
+          last_run_at?: string | null
+          name: string
+          notes?: string | null
+          probability?: number | null
+          projection?: Json | null
           result?: Json | null
+          scenario_type?: string
+          status?: string
+          subtype?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ai_details?: Json | null
+          ai_summary?: string | null
+          assumptions?: Json
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_baseline?: boolean
+          last_run_at?: string | null
+          name?: string
+          notes?: string | null
+          probability?: number | null
+          projection?: Json | null
+          result?: Json | null
+          scenario_type?: string
+          status?: string
+          subtype?: string | null
           updated_at?: string
           user_id?: string
         }

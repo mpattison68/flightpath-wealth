@@ -21,6 +21,9 @@ import { Route as AuthenticatedPortfolioRouteImport } from './routes/_authentica
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedCoachRouteImport } from './routes/_authenticated/coach'
 import { Route as AuthenticatedAssumptionsRouteImport } from './routes/_authenticated/assumptions'
+import { Route as AuthenticatedScenariosIndexRouteImport } from './routes/_authenticated/scenarios.index'
+import { Route as AuthenticatedScenariosCompareRouteImport } from './routes/_authenticated/scenarios.compare'
+import { Route as AuthenticatedScenariosScenarioIdRouteImport } from './routes/_authenticated/scenarios.$scenarioId'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
@@ -82,6 +85,24 @@ const AuthenticatedAssumptionsRoute =
     path: '/assumptions',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedScenariosIndexRoute =
+  AuthenticatedScenariosIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedScenariosRoute,
+  } as any)
+const AuthenticatedScenariosCompareRoute =
+  AuthenticatedScenariosCompareRouteImport.update({
+    id: '/compare',
+    path: '/compare',
+    getParentRoute: () => AuthenticatedScenariosRoute,
+  } as any)
+const AuthenticatedScenariosScenarioIdRoute =
+  AuthenticatedScenariosScenarioIdRouteImport.update({
+    id: '/$scenarioId',
+    path: '/$scenarioId',
+    getParentRoute: () => AuthenticatedScenariosRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -91,10 +112,13 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/portfolio': typeof AuthenticatedPortfolioRoute
   '/retirement': typeof AuthenticatedRetirementRoute
-  '/scenarios': typeof AuthenticatedScenariosRoute
+  '/scenarios': typeof AuthenticatedScenariosRouteWithChildren
   '/settings': typeof AuthenticatedSettingsRoute
   '/spending': typeof AuthenticatedSpendingRoute
   '/api/healthz': typeof ApiHealthzRoute
+  '/scenarios/$scenarioId': typeof AuthenticatedScenariosScenarioIdRoute
+  '/scenarios/compare': typeof AuthenticatedScenariosCompareRoute
+  '/scenarios/': typeof AuthenticatedScenariosIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -104,10 +128,12 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/portfolio': typeof AuthenticatedPortfolioRoute
   '/retirement': typeof AuthenticatedRetirementRoute
-  '/scenarios': typeof AuthenticatedScenariosRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/spending': typeof AuthenticatedSpendingRoute
   '/api/healthz': typeof ApiHealthzRoute
+  '/scenarios/$scenarioId': typeof AuthenticatedScenariosScenarioIdRoute
+  '/scenarios/compare': typeof AuthenticatedScenariosCompareRoute
+  '/scenarios': typeof AuthenticatedScenariosIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -119,10 +145,13 @@ export interface FileRoutesById {
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/portfolio': typeof AuthenticatedPortfolioRoute
   '/_authenticated/retirement': typeof AuthenticatedRetirementRoute
-  '/_authenticated/scenarios': typeof AuthenticatedScenariosRoute
+  '/_authenticated/scenarios': typeof AuthenticatedScenariosRouteWithChildren
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/spending': typeof AuthenticatedSpendingRoute
   '/api/healthz': typeof ApiHealthzRoute
+  '/_authenticated/scenarios/$scenarioId': typeof AuthenticatedScenariosScenarioIdRoute
+  '/_authenticated/scenarios/compare': typeof AuthenticatedScenariosCompareRoute
+  '/_authenticated/scenarios/': typeof AuthenticatedScenariosIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -138,6 +167,9 @@ export interface FileRouteTypes {
     | '/settings'
     | '/spending'
     | '/api/healthz'
+    | '/scenarios/$scenarioId'
+    | '/scenarios/compare'
+    | '/scenarios/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -147,10 +179,12 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/portfolio'
     | '/retirement'
-    | '/scenarios'
     | '/settings'
     | '/spending'
     | '/api/healthz'
+    | '/scenarios/$scenarioId'
+    | '/scenarios/compare'
+    | '/scenarios'
   id:
     | '__root__'
     | '/'
@@ -165,6 +199,9 @@ export interface FileRouteTypes {
     | '/_authenticated/settings'
     | '/_authenticated/spending'
     | '/api/healthz'
+    | '/_authenticated/scenarios/$scenarioId'
+    | '/_authenticated/scenarios/compare'
+    | '/_authenticated/scenarios/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -260,8 +297,48 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAssumptionsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/scenarios/': {
+      id: '/_authenticated/scenarios/'
+      path: '/'
+      fullPath: '/scenarios/'
+      preLoaderRoute: typeof AuthenticatedScenariosIndexRouteImport
+      parentRoute: typeof AuthenticatedScenariosRoute
+    }
+    '/_authenticated/scenarios/compare': {
+      id: '/_authenticated/scenarios/compare'
+      path: '/compare'
+      fullPath: '/scenarios/compare'
+      preLoaderRoute: typeof AuthenticatedScenariosCompareRouteImport
+      parentRoute: typeof AuthenticatedScenariosRoute
+    }
+    '/_authenticated/scenarios/$scenarioId': {
+      id: '/_authenticated/scenarios/$scenarioId'
+      path: '/$scenarioId'
+      fullPath: '/scenarios/$scenarioId'
+      preLoaderRoute: typeof AuthenticatedScenariosScenarioIdRouteImport
+      parentRoute: typeof AuthenticatedScenariosRoute
+    }
   }
 }
+
+interface AuthenticatedScenariosRouteChildren {
+  AuthenticatedScenariosScenarioIdRoute: typeof AuthenticatedScenariosScenarioIdRoute
+  AuthenticatedScenariosCompareRoute: typeof AuthenticatedScenariosCompareRoute
+  AuthenticatedScenariosIndexRoute: typeof AuthenticatedScenariosIndexRoute
+}
+
+const AuthenticatedScenariosRouteChildren: AuthenticatedScenariosRouteChildren =
+  {
+    AuthenticatedScenariosScenarioIdRoute:
+      AuthenticatedScenariosScenarioIdRoute,
+    AuthenticatedScenariosCompareRoute: AuthenticatedScenariosCompareRoute,
+    AuthenticatedScenariosIndexRoute: AuthenticatedScenariosIndexRoute,
+  }
+
+const AuthenticatedScenariosRouteWithChildren =
+  AuthenticatedScenariosRoute._addFileChildren(
+    AuthenticatedScenariosRouteChildren,
+  )
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedAssumptionsRoute: typeof AuthenticatedAssumptionsRoute
@@ -269,7 +346,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedPortfolioRoute: typeof AuthenticatedPortfolioRoute
   AuthenticatedRetirementRoute: typeof AuthenticatedRetirementRoute
-  AuthenticatedScenariosRoute: typeof AuthenticatedScenariosRoute
+  AuthenticatedScenariosRoute: typeof AuthenticatedScenariosRouteWithChildren
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedSpendingRoute: typeof AuthenticatedSpendingRoute
 }
@@ -280,7 +357,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedPortfolioRoute: AuthenticatedPortfolioRoute,
   AuthenticatedRetirementRoute: AuthenticatedRetirementRoute,
-  AuthenticatedScenariosRoute: AuthenticatedScenariosRoute,
+  AuthenticatedScenariosRoute: AuthenticatedScenariosRouteWithChildren,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedSpendingRoute: AuthenticatedSpendingRoute,
 }
@@ -297,13 +374,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
