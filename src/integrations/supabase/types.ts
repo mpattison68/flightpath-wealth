@@ -291,6 +291,104 @@ export type Database = {
         }
         Relationships: []
       }
+      planning_assumption_history: {
+        Row: {
+          assumption_id: string | null
+          changed_at: string
+          id: string
+          key: string
+          new_value: Json | null
+          note: string | null
+          old_value: Json | null
+          user_id: string
+        }
+        Insert: {
+          assumption_id?: string | null
+          changed_at?: string
+          id?: string
+          key: string
+          new_value?: Json | null
+          note?: string | null
+          old_value?: Json | null
+          user_id: string
+        }
+        Update: {
+          assumption_id?: string | null
+          changed_at?: string
+          id?: string
+          key?: string
+          new_value?: Json | null
+          note?: string | null
+          old_value?: Json | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "planning_assumption_history_assumption_id_fkey"
+            columns: ["assumption_id"]
+            isOneToOne: false
+            referencedRelation: "planning_assumptions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      planning_assumptions: {
+        Row: {
+          ai_commentary: string | null
+          category: string
+          confidence: string
+          created_at: string
+          description: string | null
+          id: string
+          key: string
+          label: string
+          last_reviewed_at: string | null
+          review_due_at: string | null
+          source: string | null
+          unit: string | null
+          updated_at: string
+          user_id: string
+          value_json: Json | null
+          value_numeric: number | null
+        }
+        Insert: {
+          ai_commentary?: string | null
+          category: string
+          confidence?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          key: string
+          label: string
+          last_reviewed_at?: string | null
+          review_due_at?: string | null
+          source?: string | null
+          unit?: string | null
+          updated_at?: string
+          user_id: string
+          value_json?: Json | null
+          value_numeric?: number | null
+        }
+        Update: {
+          ai_commentary?: string | null
+          category?: string
+          confidence?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          key?: string
+          label?: string
+          last_reviewed_at?: string | null
+          review_due_at?: string | null
+          source?: string | null
+          unit?: string | null
+          updated_at?: string
+          user_id?: string
+          value_json?: Json | null
+          value_numeric?: number | null
+        }
+        Relationships: []
+      }
       platforms: {
         Row: {
           created_at: string
@@ -447,6 +545,50 @@ export type Database = {
         }
         Relationships: []
       }
+      scenario_overrides: {
+        Row: {
+          assumption_key: string
+          created_at: string
+          id: string
+          note: string | null
+          scenario_id: string
+          updated_at: string
+          user_id: string
+          value_json: Json | null
+          value_numeric: number | null
+        }
+        Insert: {
+          assumption_key: string
+          created_at?: string
+          id?: string
+          note?: string | null
+          scenario_id: string
+          updated_at?: string
+          user_id: string
+          value_json?: Json | null
+          value_numeric?: number | null
+        }
+        Update: {
+          assumption_key?: string
+          created_at?: string
+          id?: string
+          note?: string | null
+          scenario_id?: string
+          updated_at?: string
+          user_id?: string
+          value_json?: Json | null
+          value_numeric?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scenario_overrides_scenario_id_fkey"
+            columns: ["scenario_id"]
+            isOneToOne: false
+            referencedRelation: "scenarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       scenarios: {
         Row: {
           assumptions: Json
@@ -558,18 +700,21 @@ export type Database = {
         Row: {
           assumptions: Json
           notifications: Json
+          primary_spending_currency: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
           assumptions?: Json
           notifications?: Json
+          primary_spending_currency?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
           assumptions?: Json
           notifications?: Json
+          primary_spending_currency?: string | null
           updated_at?: string
           user_id?: string
         }
