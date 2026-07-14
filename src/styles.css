@@ -62,6 +62,12 @@
   --color-status-warning-foreground: var(--status-warning-foreground);
   --color-status-neutral: var(--status-neutral);
   --color-status-neutral-foreground: var(--status-neutral-foreground);
+  --color-world-wealth: var(--world-wealth);
+  --color-world-wealth-foreground: var(--world-wealth-foreground);
+  --color-world-wealth-soft: var(--world-wealth-soft);
+  --color-world-lifestyle: var(--world-lifestyle);
+  --color-world-lifestyle-foreground: var(--world-lifestyle-foreground);
+  --color-world-lifestyle-soft: var(--world-lifestyle-soft);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -101,6 +107,16 @@
   --status-warning-foreground: oklch(0.2 0.03 70);
   --status-neutral: oklch(0.65 0.02 240);
   --status-neutral-foreground: oklch(0.99 0 0);
+  /* Two Worlds visual language.
+   * Wealth World (Investment Currency) = blue. Lifestyle World (Target
+   * Currency) = green. Use these only for the currency-world badges and
+   * subtle section accents — never for status or generic UI colour. */
+  --world-wealth: oklch(0.55 0.14 240);
+  --world-wealth-foreground: oklch(0.99 0 0);
+  --world-wealth-soft: oklch(0.95 0.03 240);
+  --world-lifestyle: oklch(0.58 0.13 155);
+  --world-lifestyle-foreground: oklch(0.99 0 0);
+  --world-lifestyle-soft: oklch(0.95 0.04 155);
   --chart-1: oklch(0.55 0.12 220);
   --chart-2: oklch(0.6 0.13 155);
   --chart-3: oklch(0.7 0.14 75);

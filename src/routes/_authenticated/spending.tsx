@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { WorldBadge } from "@/components/world-badge";
 import { formatCurrency } from "@/lib/format";
 import { useState, useMemo } from "react";
 import { toast } from "sonner";
@@ -20,8 +21,8 @@ const dashQuery = queryOptions({ queryKey: ["dashboard"], queryFn: () => getDash
 export const Route = createFileRoute("/_authenticated/spending")({
   head: () => ({
     meta: [
-      { title: "Spending — Wealth Flightpath" },
-      { name: "description", content: "Break down what life actually costs each year, from essentials to lifestyle." },
+      { title: "Retirement Lifestyle — Wealth Flightpath" },
+      { name: "description", content: "Define the retirement lifestyle your portfolio must fund each year, in your Target Currency." },
     ],
   }),
   loader: ({ context }) => Promise.all([
@@ -40,49 +41,64 @@ function SpendingPage() {
   const grouped = useMemo(() => {
     const core = data.filter((r) => r.rollup === "core");
     const lifestyle = data.filter((r) => r.rollup === "lifestyle");
-    return { core, lifestyle };
+    const reserve = data.filter((r) => r.rollup === "reserve");
+    return { core, lifestyle, reserve };
   }, [data]);
 
   const coreTotal = grouped.core.reduce((s, r) => s + Number(r.annual_amount), 0);
   const lifestyleTotal = grouped.lifestyle.reduce((s, r) => s + Number(r.annual_amount), 0);
-  const total = coreTotal + lifestyleTotal;
+  const reserveTotal = grouped.reserve.reduce((s, r) => s + Number(r.annual_amount), 0);
+  const total = coreTotal + lifestyleTotal + reserveTotal;
+  const pct = (n: number) => (total > 0 ? (n / total) * 100 : 0);
 
   return (
     <>
-      <PageHeader title="Spending" description={`What life actually costs each year in your target currency (${tgtCcy}) — the input that drives your FIRE target.`} />
+      <PageHeader
+        title="Retirement Lifestyle"
+        description="The annual lifestyle your portfolio must fund. This is not an expense tracker — it is the target that every retirement calculation is built on."
+        actions={<WorldBadge world="lifestyle" currency={tgtCcy} />}
+      />
       <div className="space-y-6 p-6">
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Summary label="Core spending" value={coreTotal} currency={tgtCcy} tone="core" />
-          <Summary label="Lifestyle spending" value={lifestyleTotal} currency={tgtCcy} tone="lifestyle" />
-          <Summary label="Total annual spending" value={total} currency={tgtCcy} tone="total" />
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Summary label="Core lifestyle"      value={coreTotal}      pct={pct(coreTotal)}      currency={tgtCcy} />
+          <Summary label="Discretionary"       value={lifestyleTotal} pct={pct(lifestyleTotal)} currency={tgtCcy} />
+          <Summary label="Long-term reserve"   value={reserveTotal}   pct={pct(reserveTotal)}   currency={tgtCcy} />
+          <Summary label="Total annual"        value={total}          currency={tgtCcy} tone="total" hint={`${formatCurrency(total / 12, tgtCcy)} / month`} />
         </div>
 
-        <Section title="Core (essentials)" rows={grouped.core} />
-        <Section title="Lifestyle (discretionary)" rows={grouped.lifestyle} />
+        <Section title="Core (essentials)"            description="What the plan must always cover, whatever else happens." rows={grouped.core} />
+        <Section title="Lifestyle (discretionary)"    description="The spending that defines the retirement you actually want." rows={grouped.lifestyle} />
+        <Section title="Long-term reserve"            description="Sinking funds for vehicles and major household replacements." rows={grouped.reserve} />
       </div>
     </>
   );
 }
 
-function Summary({ label, value, currency, tone }: { label: string; value: number; currency: string; tone: "core" | "lifestyle" | "total" }) {
+function Summary({ label, value, pct, currency, tone, hint }: { label: string; value: number; pct?: number; currency: string; tone?: "total"; hint?: string }) {
   return (
     <Card>
       <CardContent className="p-4">
-        <div className="text-xs text-muted-foreground">{label}</div>
+        <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</div>
         <div className={`text-2xl font-semibold tabular-nums ${tone === "total" ? "text-primary" : ""}`}>
           {formatCurrency(value, currency)}
         </div>
+        {pct != null ? (
+          <div className="mt-1 text-xs tabular-nums text-muted-foreground">{pct.toFixed(0)}% of total</div>
+        ) : hint ? (
+          <div className="mt-1 text-xs tabular-nums text-muted-foreground">{hint}</div>
+        ) : null}
       </CardContent>
     </Card>
   );
 }
 
-function Section({ title, rows }: { title: string; rows: Row[] }) {
+function Section({ title, description, rows }: { title: string; description?: string; rows: Row[] }) {
+  if (rows.length === 0) return null;
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-base">{title}</CardTitle>
-        <CardDescription>Categories in this bucket roll up into your annual spending total.</CardDescription>
+        <CardDescription>{description ?? "Categories in this bucket roll up into your annual retirement lifestyle total."}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-2">
         {rows.map((r) => <SpendingRow key={r.id} row={r} />)}
