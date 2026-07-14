@@ -22,6 +22,7 @@ import { Route as AuthenticatedDashboardRouteImport } from './routes/_authentica
 import { Route as AuthenticatedCoachRouteImport } from './routes/_authenticated/coach'
 import { Route as AuthenticatedAssumptionsRouteImport } from './routes/_authenticated/assumptions'
 import { Route as AuthenticatedScenariosIndexRouteImport } from './routes/_authenticated/scenarios.index'
+import { Route as AuthenticatedScenariosCompareRouteImport } from './routes/_authenticated/scenarios.compare'
 import { Route as AuthenticatedScenariosScenarioIdRouteImport } from './routes/_authenticated/scenarios.$scenarioId'
 
 const AuthRoute = AuthRouteImport.update({
@@ -90,6 +91,12 @@ const AuthenticatedScenariosIndexRoute =
     path: '/',
     getParentRoute: () => AuthenticatedScenariosRoute,
   } as any)
+const AuthenticatedScenariosCompareRoute =
+  AuthenticatedScenariosCompareRouteImport.update({
+    id: '/compare',
+    path: '/compare',
+    getParentRoute: () => AuthenticatedScenariosRoute,
+  } as any)
 const AuthenticatedScenariosScenarioIdRoute =
   AuthenticatedScenariosScenarioIdRouteImport.update({
     id: '/$scenarioId',
@@ -110,6 +117,7 @@ export interface FileRoutesByFullPath {
   '/spending': typeof AuthenticatedSpendingRoute
   '/api/healthz': typeof ApiHealthzRoute
   '/scenarios/$scenarioId': typeof AuthenticatedScenariosScenarioIdRoute
+  '/scenarios/compare': typeof AuthenticatedScenariosCompareRoute
   '/scenarios/': typeof AuthenticatedScenariosIndexRoute
 }
 export interface FileRoutesByTo {
@@ -124,6 +132,7 @@ export interface FileRoutesByTo {
   '/spending': typeof AuthenticatedSpendingRoute
   '/api/healthz': typeof ApiHealthzRoute
   '/scenarios/$scenarioId': typeof AuthenticatedScenariosScenarioIdRoute
+  '/scenarios/compare': typeof AuthenticatedScenariosCompareRoute
   '/scenarios': typeof AuthenticatedScenariosIndexRoute
 }
 export interface FileRoutesById {
@@ -141,6 +150,7 @@ export interface FileRoutesById {
   '/_authenticated/spending': typeof AuthenticatedSpendingRoute
   '/api/healthz': typeof ApiHealthzRoute
   '/_authenticated/scenarios/$scenarioId': typeof AuthenticatedScenariosScenarioIdRoute
+  '/_authenticated/scenarios/compare': typeof AuthenticatedScenariosCompareRoute
   '/_authenticated/scenarios/': typeof AuthenticatedScenariosIndexRoute
 }
 export interface FileRouteTypes {
@@ -158,6 +168,7 @@ export interface FileRouteTypes {
     | '/spending'
     | '/api/healthz'
     | '/scenarios/$scenarioId'
+    | '/scenarios/compare'
     | '/scenarios/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -172,6 +183,7 @@ export interface FileRouteTypes {
     | '/spending'
     | '/api/healthz'
     | '/scenarios/$scenarioId'
+    | '/scenarios/compare'
     | '/scenarios'
   id:
     | '__root__'
@@ -188,6 +200,7 @@ export interface FileRouteTypes {
     | '/_authenticated/spending'
     | '/api/healthz'
     | '/_authenticated/scenarios/$scenarioId'
+    | '/_authenticated/scenarios/compare'
     | '/_authenticated/scenarios/'
   fileRoutesById: FileRoutesById
 }
@@ -291,6 +304,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedScenariosIndexRouteImport
       parentRoute: typeof AuthenticatedScenariosRoute
     }
+    '/_authenticated/scenarios/compare': {
+      id: '/_authenticated/scenarios/compare'
+      path: '/compare'
+      fullPath: '/scenarios/compare'
+      preLoaderRoute: typeof AuthenticatedScenariosCompareRouteImport
+      parentRoute: typeof AuthenticatedScenariosRoute
+    }
     '/_authenticated/scenarios/$scenarioId': {
       id: '/_authenticated/scenarios/$scenarioId'
       path: '/$scenarioId'
@@ -303,6 +323,7 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedScenariosRouteChildren {
   AuthenticatedScenariosScenarioIdRoute: typeof AuthenticatedScenariosScenarioIdRoute
+  AuthenticatedScenariosCompareRoute: typeof AuthenticatedScenariosCompareRoute
   AuthenticatedScenariosIndexRoute: typeof AuthenticatedScenariosIndexRoute
 }
 
@@ -310,6 +331,7 @@ const AuthenticatedScenariosRouteChildren: AuthenticatedScenariosRouteChildren =
   {
     AuthenticatedScenariosScenarioIdRoute:
       AuthenticatedScenariosScenarioIdRoute,
+    AuthenticatedScenariosCompareRoute: AuthenticatedScenariosCompareRoute,
     AuthenticatedScenariosIndexRoute: AuthenticatedScenariosIndexRoute,
   }
 
