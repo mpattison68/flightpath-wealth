@@ -77,14 +77,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
+      { title: "Wealth Flightpath AI — Your retirement command centre" },
+      { name: "description", content: "An AI-powered retirement and wealth platform. Monitor your portfolio, model scenarios and stay on course for retirement." },
       { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { property: "og:title", content: "Wealth Flightpath AI — Your retirement command centre" },
+      { property: "og:description", content: "An AI-powered retirement and wealth platform. Monitor your portfolio, model scenarios and stay on course for retirement." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "Wealth Flightpath AI — Your retirement command centre" },
+      { name: "twitter:description", content: "An AI-powered retirement and wealth platform. Monitor your portfolio, model scenarios and stay on course for retirement." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/c61ef0d9-07f5-4256-a6ba-451ab56b9040/id-preview-61456916--4a67043f-7486-4683-9820-9644d427caa8.lovable.app-1783526663806.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/c61ef0d9-07f5-4256-a6ba-451ab56b9040/id-preview-61456916--4a67043f-7486-4683-9820-9644d427caa8.lovable.app-1783526663806.png" },
     ],
     links: [
       {

@@ -7,8 +7,8 @@ export const Route = createFileRoute("/")({
     meta: [
       { title: "Wealth Flightpath AI — Your retirement command centre" },
       { name: "description", content: "An AI-powered retirement and wealth platform. Monitor your portfolio, model scenarios and stay on course for retirement." },
-      { property: "og:title", content: "Wealth Flightpath AI" },
-      { property: "og:description", content: "An AI-powered retirement command centre. Where am I? Am I on course? What should I do next?" },
+      { property: "og:title", content: "Wealth Flightpath AI — Your retirement command centre" },
+      { property: "og:description", content: "An AI-powered retirement and wealth platform. Monitor your portfolio, model scenarios and stay on course for retirement." },
     ],
   }),
   component: Index,
