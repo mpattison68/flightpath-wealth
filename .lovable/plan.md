@@ -1,160 +1,221 @@
 
-# Wealth Flightpath AI — Production Platform Plan (v2)
+# Wealth Flightpath — Architecture Consolidation
 
-This supersedes the previous plan. Architecture is now designed for a long-lived, self-hosted retirement command centre.
+Goal: stop adding features. Restructure what exists so the four questions
+("Where am I today? On track? What changed? What next?") map cleanly to
+four distinct concepts in the codebase: **Current Reality**, **App
+Settings**, **Planning Assumptions**, **Scenarios**. Preserve all existing
+functionality; migrate data forward; no user-visible regressions.
 
-## 1. Deployment architecture (self-hosted on Hostinger VPS)
+The additional "master data model" suggestion is folded in: entities
+(assets/holdings, properties, income sources, pensions, assumptions) become
+canonical rows in a single graph. Every module — dashboard, retirement,
+scenarios, AI, future tax/estate — reads from that graph. This is the
+architectural spine.
 
-The current template targets Cloudflare Workers SSR. I'll reconfigure it to build for a **standard Node.js server**:
+---
 
-- Switch TanStack Start build target from `cloudflare-module` to `node-server` in `vite.config.ts`
-- Produce a standalone Node bundle in `.output/` (TanStack Start native output)
-- Add a thin `server.js` entry that respects `PORT` and `HOST` env vars
-- **Dockerfile** — multi-stage: `node:20-alpine` builder → slim runtime, non-root user, healthcheck on `/healthz`
-- **docker-compose.yml** — single `web` service, env file, restart policy, exposed port via `${APP_PORT}` (default 3000), labelled for Portainer
-- **.env.example** — all required vars documented (see §13)
-- **No SSL inside the app** — Nginx Proxy Manager terminates TLS, forwards plain HTTP to the container
-- **GitHub Actions** — `.github/workflows/deploy.yml` builds the Docker image, pushes to GHCR, and SSHes into the VPS to `docker compose pull && up -d`
-- **`/healthz`** server route for NPM health checks
-
-Supabase remains the database/auth/storage backend (managed Supabase, not self-hosted — confirm in §13 decision 1).
-
-## 2. Modular architecture
-
-Source layout:
+## 1. Conceptual model (single source of truth)
 
 ```text
-src/
-  modules/
-    dashboard/        # visible v1
-    portfolio/        # visible v1
-    retirement/       # visible v1
-    scenarios/        # visible v1
-    coach/            # visible v1
-    property/         # placeholder
-    pensions/         # placeholder (income sources lives here)
-    estate/           # placeholder
-    tax/              # placeholder
-    insurance/        # placeholder
-    documents/        # placeholder (statement upload lives in portfolio for v1)
-    settings/         # visible v1
-  lib/
-    finance/          # deterministic calculators (FIRE, SWR, longevity, drift)
-    ai/               # gateway client, prompt templates, extraction schemas
-    supabase/         # client + server clients
-  routes/             # TanStack route files import from modules/
-  components/ui/      # shadcn
-  components/         # shared app components (KpiCard, ChartShell, SectionHeader)
+                 ┌──────────────────────┐
+                 │  Current Reality     │  facts, dated
+                 │  (entities + snaps)  │
+                 └──────────┬───────────┘
+                            │
+             ┌──────────────┴──────────────┐
+             │                             │
+   ┌─────────▼─────────┐         ┌─────────▼─────────┐
+   │ Planning          │         │ App Settings      │
+   │ Assumptions       │         │ (theme, currency  │
+   │ (baseline, one    │         │  display, AI cfg) │
+   │  row per key)     │         └───────────────────┘
+   └─────────┬─────────┘
+             │
+   ┌─────────▼─────────┐
+   │ Scenarios         │  store ONLY overrides
+   │ (sparse diffs on  │  vs baseline assumptions
+   │  baseline)        │
+   └─────────┬─────────┘
+             │
+   ┌─────────▼─────────┐
+   │ Retirement Engine │  pure fn: (reality, assumptions, overrides) → results
+   └─────────┬─────────┘
+             │
+   ┌─────────▼─────────┐
+   │ Dashboard · AI ·  │  read-only consumers
+   │ Reports · Reviews │
+   └───────────────────┘
 ```
 
-Each module owns its routes, components, server functions, and types. Nav-level registry decides which modules are visible vs "coming soon".
+Rules that fall out of this:
+- Scenarios never mutate baseline assumptions.
+- AI never computes numbers — it consumes engine output as JSON.
+- Every asset/property/income/pension exists once, referenced everywhere.
 
-## 3. Database schema (Supabase, full v1+ surface)
+---
 
-Created up front so future modules drop in cleanly. All tables RLS-scoped to `auth.uid()` with explicit GRANTs, `user_roles` pattern for admin.
+## 2. Data-model changes
 
-| Table | Purpose |
-|---|---|
-| `profiles` | display name, base currency (default GBP), locale |
-| `user_roles` | admin / user enum, separate table per security rules |
-| `platforms` | user's investment platforms (HL, Vanguard, etc.) |
-| `holdings` | full spec: platform, provider, fund, ticker, asset_class, region, currency, value, units, price, wrapper, liquidity, role, notes |
-| `valuation_snapshots` | header row per snapshot (date, source: manual/upload, total_value, fx_rates jsonb) |
-| `snapshot_holdings` | line items frozen at snapshot time |
-| `portfolio_documents` | uploaded statements (storage path, mime, parsed_json, status) |
-| `retirement_plans` | one active plan per user + named historical versions |
-| `income_sources` | state pensions, DB pensions, annuities, rental, consulting — with start_date, annual_value, inflation_behaviour, tax_status, currency |
-| `property_assets` | value, purchase_price, sale_date, rental_income, expenses, mortgage, role |
-| `scenarios` | named scenarios with assumptions JSON |
-| `scenario_results` | cached deterministic projections per scenario |
-| `documents` | unified document library (type enum, storage path, ai_embedding ref) |
-| `ai_conversations` + `ai_messages` | coach chat history (threaded) |
-| `ai_reviews` | generated quarterly reviews |
-| `settings` | per-user assumptions, tolerances, notification prefs |
-| `fx_rates` | base GBP rate cache |
+New / renamed tables (all in same migration batch, with GRANTs + RLS per
+existing pattern):
 
-Storage buckets: `portfolio-documents` (private), `library-documents` (private).
+- `planning_assumptions` — one row per assumption key, per user. Columns:
+  `key` (enum, e.g. `inflation.uk`, `growth.equity_real`, `retirement.target_age`,
+  `spending.core`, `property.sale_year`, `state_pension.amount`, …),
+  `value_numeric`, `value_json` (for structured ones), `unit`, `confidence`
+  (`high|medium|low`), `source`, `description`, `last_reviewed_at`,
+  `review_due_at`, `ai_commentary`.
+- `planning_assumption_history` — append-only change log
+  (`assumption_id, old_value, new_value, changed_at, note`).
+- `scenario_overrides` — replaces the current "clone assumptions JSON"
+  approach. Columns: `scenario_id, assumption_key, value_numeric,
+  value_json, note`. Sparse.
+- `app_settings` — narrow table for pure app config
+  (`theme, base_currency, alt_currency, ai_personality, dashboard_layout`).
+  Migrated from current `user_settings` + `profiles` split; planning-shaped
+  fields move out into `planning_assumptions`.
 
-## 4. Statement upload pipeline (v1)
+Kept as-is (already canonical): `holdings`, `property_assets`,
+`income_sources`, `retirement_plans` (demoted to "profile + target date"
+only — the numeric assumptions inside it migrate to `planning_assumptions`),
+`valuation_snapshots`, `snapshot_holdings`, `documents`, `scenarios`,
+`ai_*`, `fx_rates`, `user_roles`.
 
-1. User uploads PDF/XLSX/CSV → stored in `portfolio-documents`
-2. Server function: detect type → extract text (pdf-parse for PDF, xlsx for sheets, csv-parse for CSV)
-3. Send extracted text + system prompt to AI Gateway → returns structured JSON (Zod-validated)
-4. Auto-classify asset class / region / fund type / growth-vs-defensive
-5. Match against existing holdings (ticker → name fuzzy → ask user)
-6. **Review screen**: side-by-side diff of current vs proposed holdings, every field editable
-7. On confirm: insert/update holdings, write `valuation_snapshots` + `snapshot_holdings`, mark document as processed
-8. Never auto-overwrite
+Migration: read current `user_settings.assumptions` JSON + relevant
+`retirement_plans` fields and seed one `planning_assumptions` row per key
+per user. Then drop the JSON blob.
 
-## 5. AI design (strict separation)
+---
 
-- Deterministic calculators in `src/lib/finance/` (pure TS, unit-tested) own **every number**
-- AI calls receive **pre-computed metrics as JSON context**, never raw holdings to "calculate"
-- AI Gateway via `@ai-sdk/openai-compatible` (default `google/gemini-3-flash-preview`; `openai/gpt-5` available — see §13 decision 2)
-- Roles:
-  - **Statement Extractor** — structured output via Zod schema
-  - **Portfolio Assistant** (chat) — context-augmented Q&A
-  - **Quarterly Reviewer** — generates `ai_reviews`
-  - **Scenario Commentator** — narrates simulator output
-  - **Document Q&A** — RAG over document library (Phase 4)
+## 3. Code reorganisation
 
-## 6. Retirement Flightpath (centrepiece)
+```text
+src/lib/
+  reality/        # queries over canonical entity tables (holdings, property, income, pensions, snapshots)
+  assumptions/    # CRUD + confidence + history for planning_assumptions
+  scenarios/      # CRUD + override merge (baseline ⊕ overrides → resolved set)
+  engine/         # pure calculators: projection, RPPI, FIRE, confidence scores
+  ai/             # gateway client + prompt templates; consumes engine output only
+  settings/       # app_settings only (theme/currency-display/AI cfg)
+```
 
-Hero visualisation: timeline from today → retirement date → life expectancy, with a single "glidepath line" of projected sustainable income. Surrounding cards: Years Remaining · FIRE % · Liquid FIRE % · Sustainable Income · State Pension start · Property Transition marker · Confidence Score · Latest AI Assessment · Next Milestone. Feels like a Garmin training calendar, not a spreadsheet.
+- `src/lib/finance/calculators.ts` → `src/lib/engine/` (split by concern).
+- Existing `settings.functions.ts` splits into `settings.functions.ts`
+  (app settings) and `assumptions.functions.ts` (planning).
+- `retirement.functions.ts` becomes a thin caller of `engine/`.
+- Dedup: one `KpiCard`, one `ChartShell`, one number-formatter, one
+  currency-conversion helper. Audit and remove duplicates.
 
-## 7. Scenario engine
+Naming pass: `plan` (retirement profile) vs `assumption` (single value) vs
+`scenario` (override set) — enforced consistently in table names, server
+fns, and UI copy.
 
-- Named scenarios stored per user with cloned assumption set
-- Deterministic projection engine (`src/lib/finance/projection.ts`): year-by-year portfolio value, withdrawal, income from each source, tax-aware where modelled
-- Optional Monte Carlo (Phase 3) for probability-of-success
-- Comparison view: 2–4 scenarios overlaid on income/portfolio-value charts
-- AI commentary per scenario
+---
 
-## 8. Property & income source modules
+## 4. Retirement engine (pure)
 
-Both ship in v1 schema and have full CRUD UIs. Property includes rental P&L; income sources support multi-currency, inflation behaviour (CPI/fixed/none), tax status, and per-scenario on/off toggle.
+Signature:
+```ts
+runProjection({
+  reality: RealitySnapshot,          // assets + income + property today
+  baseline: ResolvedAssumptions,     // all planning assumptions
+  overrides?: ScenarioOverrides,     // sparse
+}): ProjectionResult
+```
+Returns: year-by-year portfolio + income + spending in nominal and real
+terms, sustainable income, depletion year, FIRE %, **RPPI** (Retirement
+Purchasing Power Index = real sustainable income ÷ target real spend,
+FX-adjusted for primary spending currency), retirement confidence score,
+and assumption-confidence score (weighted avg of confidence tags on the
+assumptions the result depends on most).
 
-## 9. Document library
+All existing calculators are replaced by / wrapped inside this engine so
+Dashboard, Retirement, and Scenarios all call the same function.
 
-v1: upload + categorise + view. Phase 4: embeddings (Gemini embeddings) + RAG search so the coach can cite "your will, section 3" or "your 2024 SIPP statement".
+---
 
-## 10. UI system
+## 5. UI changes
 
-- Light theme primary (calm, off-white surfaces), dark mode as Phase 2
-- Semantic tokens only in `src/styles.css`: surface levels, status (positive/negative/warning/neutral), 8-hue chart palette tuned for accessibility
-- Typography: refined sans for UI, tabular numerics for figures
-- shadcn/ui customised via variants — no hardcoded colours in components
-- Recharts wrapped in `ChartShell` with consistent margins, grid, and tooltip styling
-- Every chart has a one-line caption answering "what question does this answer?"
+- **Dashboard**: unchanged in spirit — today's position only. Adds RPPI
+  card and Assumption-Confidence badge next to Retirement Confidence. Any
+  KPI derived from assumptions gets a small "based on assumptions" tag
+  linking to the Assumptions Centre.
+- **Settings** page: slimmed to true app settings only (theme, display
+  currency, alt currency, AI personality). Planning fields removed with an
+  inline notice: "Moved to Planning Assumptions".
+- **Planning Assumptions Centre** (new route `/assumptions`): grouped
+  accordion (Inflation, Investment, Currency, Retirement, Spending,
+  Property, State Pension, Consulting). Each row: value, unit, confidence
+  pill, last-reviewed, review-due, source, description, AI commentary,
+  history drawer. Bulk "mark reviewed" action.
+- **Scenarios**: rebuilt as override editor. Left column = baseline value,
+  right column = override (empty = inherit). Impact summary + comparison
+  vs baseline + AI commentary. No more assumption cloning.
+- **Retirement**: keeps target-date/profile fields; numeric knobs move to
+  Assumptions.
+- **Nav**: add Assumptions; keep Scenarios; everything else unchanged.
 
-## 11. Phased rollout
+Every chart keeps its one-line caption. Every number stays clickable for
+explanation (existing pattern extended).
 
-| Phase | Scope | Ships |
-|---|---|---|
-| **1 (this turn)** | Deploy infra · auth · schema · design system · module shell · Dashboard · Portfolio (holdings CRUD + analytics) · Retirement form + flightpath visual · Settings | Self-hosted-ready app you can deploy today |
-| 2 | Statement upload + AI extraction · snapshots + history comparison | |
-| 3 | Scenario engine + comparison · AI Coach chat (threaded, DB-persisted) | |
-| 4 | Property & income source full UIs · Quarterly Review PDF · Document library + RAG · Notifications | |
-| 5 | Remaining placeholder modules (Estate, Tax, Insurance) as user prioritises | |
+---
 
-## 12. Technical details (skip if non-technical)
+## 6. AI boundaries (unchanged principle, tightened wiring)
 
-- **TanStack Start Node target**: `vite.config.ts` → `tanstackStart({ target: 'node-server' })`, custom `server.js` reads `PORT`/`HOST`
-- **No Cloudflare-specific code**: drop `unenv`-only paths; use native Node `fs`/`crypto`/`stream` freely
-- **Server functions** for app-internal logic, server routes for `/api/public/webhooks/*` and `/healthz`
-- **Auth bearer** auto-attached via `attachSupabaseAuth` in `src/start.ts`
-- **Calculators** pure functions, vitest-covered, never call network
-- **AI Gateway** provider helper in `src/lib/ai/gateway.server.ts`, run-id propagation per knowledge
-- **Migrations**: every `CREATE TABLE` paired with GRANTs and RLS in the same migration
-- **PDF parsing** with `pdf-parse` (Node-friendly); **XLSX** with `xlsx`; **CSV** with `papaparse`
-- **Build secrets**: none needed; runtime secrets via `.env`
+AI receives structured JSON from `engine/` + `reality/` + `assumptions/`.
+Prompt templates centralised under `src/lib/ai/prompts/`. New commentary
+targets: per-assumption (`ai_commentary` column), per-scenario, quarterly
+review. No AI code path calls a calculator directly.
 
-## 13. Decisions needed before I start
+---
 
-1. **Supabase: managed or self-hosted on the VPS?** Managed Supabase is faster, free tier is generous, you keep `*.supabase.co` URLs. Self-hosting Supabase via Docker is possible but adds significant ops burden (Postgres, GoTrue, Storage, Realtime, Kong). **Recommend: managed Supabase**. Confirm?
-2. **AI provider.** Spec says OpenAI; Lovable AI Gateway is the supported path and proxies OpenAI models. **Recommend: Lovable AI Gateway** with `google/gemini-3-flash-preview` for chat (fast/cheap) and `openai/gpt-5` for statement extraction (best accuracy). OK?
-3. **Base currency.** UK State Pension implies **GBP base**, with multi-currency holdings converted via stored FX rates. Confirm?
-4. **GitHub repo for Actions deploy.** I'll write the workflow assuming GHCR + SSH deploy to the VPS. You'll need to add `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY`, and a `GHCR_PAT` as repo secrets — I'll document this in `DEPLOY.md`. OK?
-5. **Phase 1 scope confirmed?** Phase 1 ships infra + auth + schema + Dashboard + Portfolio + Retirement form/flightpath + Settings. Statement upload, scenarios, and AI coach come in Phases 2–3. If you'd rather front-load statement upload (so you can import real data immediately), say so and I'll reorder.
+## 7. What is explicitly NOT in this refactor
 
-Reply with the four answers (or just "go" to accept recommendations) and I'll build Phase 1 end-to-end.
+Tax, Estate, Insurance, Healthcare, Currency Planning, Investment
+Committee, Document Intelligence, Goal Planning, Retirement Checklists.
+The schema and module registry leave room for them; no UI or logic ships.
+
+Document library stays as it is today; AI-over-documents (RAG) is deferred.
+
+Multi-currency spending buckets are supported by the assumption schema
+(spending keys can carry a currency) but no new spending UI ships beyond
+what's needed to edit the assumptions.
+
+---
+
+## 8. Delivery order (single PR, staged commits)
+
+1. Migration: new tables + backfill from existing JSON/settings + GRANTs + RLS.
+2. `src/lib/engine/` + `assumptions/` + `scenarios/` server fns; unit-test
+   the engine against current dashboard/retirement numbers to prove parity.
+3. Refactor Dashboard + Retirement + Scenarios to call the engine.
+4. Ship Assumptions Centre UI; slim Settings; rebuild Scenario editor.
+5. Dedup pass (components, formatters, fx helpers); rename pass.
+6. Typecheck + manual walkthrough of every existing screen; confirm no
+   regressions in KPIs, retirement projection, import flow, FX display.
+
+---
+
+## 9. Open questions before I start
+
+1. **RPPI target currency.** Should RPPI be expressed in your primary
+   *spending* currency (which may differ from base reporting currency
+   GBP)? I'd add a `primary_spending_currency` app setting and default it
+   to GBP.
+2. **State Pension / Consulting** — currently modelled in `income_sources`.
+   Keep them there (canonical entity) and let the relevant *assumptions*
+   (indexation, probability, start date) live in `planning_assumptions`
+   referencing the source id? That's my recommendation — keeps the
+   "entity exists once" rule intact.
+3. **Migration risk.** Backfilling assumptions from the existing JSON
+   blob is lossy if you've customised anything unusual. OK for me to log
+   the pre-migration blob into `planning_assumption_history` as the
+   initial "source" so nothing is lost?
+4. **Scope check.** Is it acceptable that Scenarios' UI changes shape
+   (override-only editor) — existing saved scenarios would be migrated to
+   overrides where they differ from the new baseline, but the editing UX
+   is different?
+
+Reply with answers (or "go" to accept my recommendations on all four) and
+I'll execute the plan in order.
