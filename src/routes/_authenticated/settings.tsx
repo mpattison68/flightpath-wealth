@@ -1,14 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useSuspenseQuery, queryOptions, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { getSettings, updateProfile, updateUserSettings } from "@/lib/settings.functions";
+import { getSettings, updateProfile } from "@/lib/settings.functions";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
-import { HelpCircle, SlidersHorizontal, ArrowRight, Wallet } from "lucide-react";
+import { HelpCircle, SlidersHorizontal, ArrowRight } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 
@@ -24,25 +24,18 @@ function SettingsPage() {
   const { data } = useSuspenseQuery(settingsQuery);
   const qc = useQueryClient();
   const pFn = useServerFn(updateProfile);
-  const sFn = useServerFn(updateUserSettings);
 
   const [p, setP] = useState({
     display_name: data.profile?.display_name ?? "",
     base_currency: data.profile?.base_currency ?? "GBP",
     alt_currency: (data.profile as { alt_currency?: string | null } | null)?.alt_currency ?? "",
   });
-  const [primarySpendingCurrency, setPrimarySpendingCurrency] = useState<string>(
-    (data.settings as { primary_spending_currency?: string | null } | null)?.primary_spending_currency ?? "",
-  );
   useEffect(() => {
     setP({
       display_name: data.profile?.display_name ?? "",
       base_currency: data.profile?.base_currency ?? "GBP",
       alt_currency: (data.profile as { alt_currency?: string | null } | null)?.alt_currency ?? "",
     });
-    setPrimarySpendingCurrency(
-      (data.settings as { primary_spending_currency?: string | null } | null)?.primary_spending_currency ?? "",
-    );
   }, [data]);
 
   const saveP = useMutation({
@@ -56,16 +49,6 @@ function SettingsPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const saveSpending = useMutation({
-    mutationFn: () => sFn({ data: { primary_spending_currency: primarySpendingCurrency ? primarySpendingCurrency : null } }),
-    onSuccess: () => {
-      toast.success("Spending currency saved");
-      qc.invalidateQueries({ queryKey: ["settings"] });
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
   return (
     <>
       <PageHeader title="Settings" description="How the application looks and behaves." />
@@ -73,17 +56,26 @@ function SettingsPage() {
         <div className="grid gap-6 p-6 lg:grid-cols-2">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Profile & Display</CardTitle>
-              <CardDescription>How the app addresses you and shows currency.</CardDescription>
+              <CardTitle className="text-base">Profile & Currencies</CardTitle>
+              <CardDescription>
+                Wealth Flightpath separates <strong>where you build wealth</strong> from
+                <strong> where you spend it</strong>. Set both below.
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <Field label="Display name" help="The name the app uses to greet you. Cosmetic only — no effect on calculations.">
                 <Input value={p.display_name ?? ""} onChange={(e) => setP({ ...p, display_name: e.target.value })} />
               </Field>
-              <Field label="Base currency" help="ISO 4217 code (e.g. GBP) used as the reporting currency across the app. Every KPI, chart and projection is expressed in it.">
+              <Field
+                label="Investment currency"
+                help="ISO 4217 code (e.g. GBP, USD, EUR, AUD) in which your investments are primarily denominated. Used for portfolio valuation, performance, allocation and historical investment reporting."
+              >
                 <Input value={p.base_currency} onChange={(e) => setP({ ...p, base_currency: e.target.value.toUpperCase().slice(0, 3) })} />
               </Field>
-              <Field label="Alternative currency (optional)" help="A secondary ISO code (e.g. USD, ZAR) shown next to base-currency values on the Dashboard. Spot rate is fetched from Google Finance with a Frankfurter fallback.">
+              <Field
+                label="Target currency"
+                help="ISO 4217 code (e.g. ZAR, EUR, USD, GBP) in which you expect to fund your retirement lifestyle. This is the primary planning currency: spending, FIRE target, retirement income, readiness and purchasing power are all expressed in it. Spot rate fetched from Google Finance with a Frankfurter fallback."
+              >
                 <Input
                   placeholder="e.g. USD, EUR"
                   value={p.alt_currency ?? ""}
@@ -91,30 +83,6 @@ function SettingsPage() {
                 />
               </Field>
               <Button onClick={() => saveP.mutate()} disabled={saveP.isPending}>Save profile</Button>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <Wallet className="h-4 w-4" /> Purchasing Power
-              </CardTitle>
-              <CardDescription>
-                The currency you actually spend in. Later drives purchasing-power projections and healthcare / lifestyle cost inflation.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Field
-                label="Primary spending currency"
-                help="Distinct from base currency (reporting) and alternative currency (dashboard reference). This is what your day-to-day expenses are denominated in — e.g. ZAR if you live in South Africa but report your net worth in GBP."
-              >
-                <Input
-                  placeholder="e.g. GBP, ZAR, EUR"
-                  value={primarySpendingCurrency}
-                  onChange={(e) => setPrimarySpendingCurrency(e.target.value.toUpperCase().slice(0, 3))}
-                />
-              </Field>
-              <Button onClick={() => saveSpending.mutate()} disabled={saveSpending.isPending}>Save</Button>
             </CardContent>
           </Card>
 
