@@ -92,7 +92,9 @@ function AssumptionRow({ row }: { row: Row }) {
   const upsertFn = useServerFn(upsertAssumption);
   const reviewFn = useServerFn(markAssumptionReviewed);
   const [value, setValue] = useState<string>(row.value_numeric?.toString() ?? "");
-  const [confidence, setConfidence] = useState<"high" | "medium" | "low">(row.confidence);
+  const [confidence, setConfidence] = useState<"high" | "medium" | "low">(
+    row.confidence as "high" | "medium" | "low",
+  );
   const [source, setSource] = useState(row.source ?? "");
   const [note, setNote] = useState("");
   const [open, setOpen] = useState(false);
