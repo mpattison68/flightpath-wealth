@@ -46,7 +46,7 @@ const DEFAULT_ASSUMPTIONS: Assumptions = {
 
 function DashboardPage() {
   const { data } = useSuspenseQuery(dashboardQuery);
-  const { data: assumptions } = useSuspenseQuery(assumptionsQuery);
+  const { data: assumptionRows } = useSuspenseQuery(assumptionsQuery);
   const holdings = (data.holdings ?? []) as Holding[];
   const assumptions: Assumptions = {
     ...DEFAULT_ASSUMPTIONS,
@@ -82,7 +82,7 @@ function DashboardPage() {
 
   // ---- Review Centre --------------------------------------------------
   const now = Date.now();
-  const overdueAssumptions = assumptions.filter((a) => {
+  const overdueAssumptions = assumptionRows.filter((a) => {
     const freq = (a as { review_frequency?: ReviewFrequency }).review_frequency ?? "annually";
     if (freq === "never") return false;
     if (!a.last_reviewed_at) return true;
