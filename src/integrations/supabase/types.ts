@@ -323,6 +323,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          alt_currency: string | null
           base_currency: string
           created_at: string
           display_name: string | null
@@ -331,6 +332,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          alt_currency?: string | null
           base_currency?: string
           created_at?: string
           display_name?: string | null
@@ -339,6 +341,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          alt_currency?: string | null
           base_currency?: string
           created_at?: string
           display_name?: string | null

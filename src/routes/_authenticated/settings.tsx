@@ -33,10 +33,15 @@ function SettingsPage() {
   const [p, setP] = useState({
     display_name: data.profile?.display_name ?? "",
     base_currency: data.profile?.base_currency ?? "GBP",
+    alt_currency: (data.profile as { alt_currency?: string | null } | null)?.alt_currency ?? "",
   });
   useEffect(() => {
     setA({ ...DEFAULT_ASSUMPTIONS, ...((data.settings?.assumptions as object) ?? {}) });
-    setP({ display_name: data.profile?.display_name ?? "", base_currency: data.profile?.base_currency ?? "GBP" });
+    setP({
+      display_name: data.profile?.display_name ?? "",
+      base_currency: data.profile?.base_currency ?? "GBP",
+      alt_currency: (data.profile as { alt_currency?: string | null } | null)?.alt_currency ?? "",
+    });
   }, [data]);
 
   const saveA = useMutation({
@@ -45,8 +50,8 @@ function SettingsPage() {
     onError: (e: Error) => toast.error(e.message),
   });
   const saveP = useMutation({
-    mutationFn: () => pFn({ data: p }),
-    onSuccess: () => { toast.success("Profile saved"); qc.invalidateQueries({ queryKey: ["settings"] }); },
+    mutationFn: () => pFn({ data: { ...p, alt_currency: p.alt_currency ? p.alt_currency : null } }),
+    onSuccess: () => { toast.success("Profile saved"); qc.invalidateQueries({ queryKey: ["settings"] }); qc.invalidateQueries({ queryKey: ["dashboard"] }); qc.invalidateQueries({ queryKey: ["fx-alt"] }); },
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -59,6 +64,13 @@ function SettingsPage() {
           <CardContent className="space-y-3">
             <Field label="Display name"><Input value={p.display_name ?? ""} onChange={(e) => setP({ ...p, display_name: e.target.value })} /></Field>
             <Field label="Base currency"><Input value={p.base_currency} onChange={(e) => setP({ ...p, base_currency: e.target.value.toUpperCase().slice(0, 3) })} /></Field>
+            <Field label="Alternative currency (optional)">
+              <Input
+                placeholder="e.g. USD, EUR"
+                value={p.alt_currency ?? ""}
+                onChange={(e) => setP({ ...p, alt_currency: e.target.value.toUpperCase().slice(0, 3) })}
+              />
+            </Field>
             <Button onClick={() => saveP.mutate()} disabled={saveP.isPending}>Save profile</Button>
           </CardContent>
         </Card>
