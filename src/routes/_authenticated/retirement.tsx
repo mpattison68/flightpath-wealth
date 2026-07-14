@@ -282,20 +282,6 @@ function RetirementPage() {
           </CardContent>
         </Card>
 
-        <Card style={{ display: "none" }}>
-          <CardHeader>
-            <CardTitle className="text-base">_deprecated</CardTitle>
-            <CardDescription>
-              How much {tgtCcy} spending each unit of {invCcy} capital will fund after growth, currency drift and target-country inflation.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3 sm:grid-cols-3">
-            <KpiCard label="RPPI at retirement" value={rppiValue > 0 ? `${rppiValue.toFixed(2)}×` : "—"} hint={`${years.toFixed(1)}y · ${equityReal}% real · ${fxDriftPct}% fx · ${targetInflationPct}% infl`} />
-            <KpiCard label="FIRE target (in investment ccy)" value={formatCurrency(requiredCapitalInv, invCcy)} hint="Portfolio needed today" />
-            <KpiCard label="Portfolio in target ccy" value={formatCurrency(totalInv * fx, tgtCcy)} hint="Today's spot" />
-          </CardContent>
-        </Card>
-
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Flightpath & Timeline</CardTitle>
