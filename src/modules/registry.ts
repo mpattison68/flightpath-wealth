@@ -20,7 +20,7 @@ export const MODULES: ModuleDef[] = [
   { id: "dashboard",   label: "Dashboard",   path: "/dashboard",   icon: LayoutDashboard,    visible: true,  status: "active",  description: "Where am I today?" },
   { id: "portfolio",   label: "Portfolio",   path: "/portfolio",   icon: Briefcase,          visible: true,  status: "active",  engine: "portfolio",     description: "Holdings, allocation and performance." },
   { id: "retirement",  label: "Retirement",  path: "/retirement",  icon: Compass,            visible: true,  status: "active",  description: "How every engine funds your retirement." },
-  { id: "spending",    label: "Spending",    path: "/spending",    icon: Wallet,             visible: true,  status: "active",  description: "What life actually costs each year." },
+  { id: "spending",    label: "Retirement Lifestyle", path: "/spending", icon: Wallet,       visible: true,  status: "active",  description: "The lifestyle your portfolio must fund each year, in your Target Currency." },
   { id: "assumptions", label: "Assumptions", path: "/assumptions", icon: SlidersHorizontal,  visible: true,  status: "active",  description: "The numbers behind every projection." },
   { id: "scenarios",   label: "Scenarios",   path: "/scenarios",   icon: FlaskConical,       visible: true,  status: "active",  description: "What if you made a different choice?" },
   { id: "coach",       label: "AI Coach",    path: "/coach",       icon: MessageSquare,      visible: true,  status: "active",  description: "Ask anything about your plan." },
