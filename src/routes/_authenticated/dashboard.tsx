@@ -15,6 +15,7 @@ import {
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, AreaChart, Area, XAxis, YAxis, CartesianGrid } from "recharts";
 import { Plane, CalendarClock, ChevronRight } from "lucide-react";
+import { investmentCurrency, targetCurrency, needsFx } from "@/lib/currency";
 
 const dashboardQuery = queryOptions({
   queryKey: ["dashboard"],
@@ -52,24 +53,27 @@ function DashboardPage() {
     ...DEFAULT_ASSUMPTIONS,
     ...((data.settings?.assumptions as object) ?? {}),
   };
-  const currency = "GBP";
-  const altCurrency = (data.profile as { alt_currency?: string | null } | null)?.alt_currency || null;
+  const invCcy = investmentCurrency(data.profile);
+  const tgtCcy = targetCurrency(data.profile);
+  const hasFx = needsFx(data.profile);
 
   const fxQuery = useQuery({
-    queryKey: ["fx-alt", currency, altCurrency],
-    queryFn: () => getSpotRate({ data: { from: currency, to: altCurrency! } }),
-    enabled: !!altCurrency && altCurrency !== currency,
+    queryKey: ["fx-alt", invCcy, tgtCcy],
+    queryFn: () => getSpotRate({ data: { from: invCcy, to: tgtCcy } }),
+    enabled: hasFx,
     staleTime: 5 * 60 * 1000,
   });
-  const fxRate = fxQuery.data?.rate ?? null;
-  const showAlt = !!altCurrency && !!fxRate;
-  const alt = (v: number) => (showAlt ? ` · ${formatCurrency(v * (fxRate as number), altCurrency as string)}` : "");
+  const fxRate = hasFx ? (fxQuery.data?.rate ?? null) : 1;
+  const toTarget = (v: number) => (fxRate ? v * fxRate : v);
 
   const total = sumValue(holdings);
   const liquid = liquidValue(holdings);
-  const sustainable = sustainableIncome(total, assumptions.swr_pct);
-  const fire = fireProgress(total, assumptions.fire_target);
-  const liquidFire = fireProgress(liquid, assumptions.liquid_fire_target);
+  // Retirement metrics live in the Target Currency.
+  const sustainableTgt = toTarget(sustainableIncome(total, assumptions.swr_pct));
+  const fireTargetTgt = toTarget(assumptions.fire_target);
+  const liquidFireTargetTgt = toTarget(assumptions.liquid_fire_target);
+  const fire = fireProgress(toTarget(total), fireTargetTgt);
+  const liquidFire = fireProgress(toTarget(liquid), liquidFireTargetTgt);
   const years = data.plan?.target_retirement_date
     ? Math.max(0, yearsBetween(new Date(), new Date(data.plan.target_retirement_date)))
     : null;
@@ -125,35 +129,35 @@ function DashboardPage() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <KpiCard
             label="Portfolio value"
-            value={formatCurrency(total, currency)}
-            hint={`${holdings.length} holdings${alt(total)}`}
+            value={formatCurrency(total, invCcy)}
+            hint={`${holdings.length} holdings · Investment currency`}
           />
           <KpiCard
             label="FIRE progress"
             value={formatPercent(fire)}
-            hint={`Target ${formatCurrency(assumptions.fire_target, currency)}`}
+            hint={`Target ${formatCurrency(fireTargetTgt, tgtCcy)}`}
             tone={fire >= 100 ? "positive" : fire >= 60 ? "neutral" : "warning"}
           />
           <KpiCard
             label="Liquid FIRE"
             value={formatPercent(liquidFire)}
-            hint={`Liquid ${formatCurrency(liquid, currency)}${alt(liquid)}`}
+            hint={`Liquid ${formatCurrency(liquid, invCcy)}`}
           />
           <KpiCard
             label="Sustainable income"
-            value={formatCurrency(sustainable, currency)}
-            hint={`At ${assumptions.swr_pct}% SWR${alt(sustainable)}`}
+            value={formatCurrency(sustainableTgt, tgtCcy)}
+            hint={`At ${assumptions.swr_pct}% SWR · Target currency`}
           />
         </div>
 
-        {altCurrency ? (
+        {hasFx ? (
           <div className="text-xs text-muted-foreground">
             {fxQuery.isLoading
-              ? `Fetching ${currency}/${altCurrency} spot rate…`
+              ? `Fetching ${invCcy}/${tgtCcy} spot rate…`
               : fxQuery.isError
-                ? `Could not load ${currency}/${altCurrency} rate from Google Finance.`
+                ? `Could not load ${invCcy}/${tgtCcy} rate from Google Finance.`
                 : fxRate
-                  ? `Spot: 1 ${currency} = ${fxRate.toFixed(4)} ${altCurrency} (Google Finance)`
+                  ? `Spot: 1 ${invCcy} = ${fxRate.toFixed(4)} ${tgtCcy} (Google Finance)`
                   : null}
           </div>
         ) : null}
@@ -180,8 +184,8 @@ function DashboardPage() {
                     </defs>
                     <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" vertical={false} />
                     <XAxis dataKey="date" stroke="var(--color-muted-foreground)" fontSize={11} />
-                    <YAxis stroke="var(--color-muted-foreground)" fontSize={11} width={70} tickFormatter={(v) => formatCurrency(v, currency)} />
-                    <Tooltip formatter={(v: number) => formatCurrency(v, currency)} contentStyle={{ background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 8, fontSize: 12 }} />
+                    <YAxis stroke="var(--color-muted-foreground)" fontSize={11} width={70} tickFormatter={(v) => formatCurrency(v, invCcy)} />
+                    <Tooltip formatter={(v: number) => formatCurrency(v, invCcy)} contentStyle={{ background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 8, fontSize: 12 }} />
                     <Area type="monotone" dataKey="value" stroke="var(--color-chart-1)" fill="url(#g1)" strokeWidth={2} />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -205,7 +209,7 @@ function DashboardPage() {
                         <Cell key={i} fill={`var(--color-chart-${(i % 8) + 1})`} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(v: number) => formatCurrency(v, currency)} contentStyle={{ background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 8, fontSize: 12 }} />
+                    <Tooltip formatter={(v: number) => formatCurrency(v, invCcy)} contentStyle={{ background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 8, fontSize: 12 }} />
                   </PieChart>
                 </ResponsiveContainer>
               )}
