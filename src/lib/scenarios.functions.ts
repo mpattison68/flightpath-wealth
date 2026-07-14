@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 import { runProjection, runSensitivity, type ProjectionInputs, type ProjectionOutput, type SensitivityDriver } from "@/lib/finance/projection";
+import type { Json } from "@/integrations/supabase/types";
 import { resolveProjectionInputs } from "@/lib/scenarios/resolver";
 import { findPreset, STRESS_PRESETS } from "@/lib/scenarios/stress-presets";
 import { findSubtype } from "@/lib/scenarios/catalog";
@@ -280,7 +281,7 @@ export const runScenario = createServerFn({ method: "POST" })
     await context.supabase
       .from("scenarios")
       .update({
-        projection: result as unknown as Record<string, unknown>,
+        projection: result as unknown as Json,
         last_run_at: new Date().toISOString(),
       })
       .eq("id", data.id);
@@ -335,8 +336,8 @@ export const runStressTest = createServerFn({ method: "POST" })
       scenario_id: data.scenario_id,
       preset_key: data.preset_key,
       label: preset.label,
-      overrides: preset.overrides as unknown as Record<string, unknown>,
-      result: result as unknown as Record<string, unknown>,
+      overrides: preset.overrides as unknown as Json,
+      result: result as unknown as Json,
     };
     const q = existing
       ? context.supabase.from("scenario_stress_tests").update(row).eq("id", existing.id).select().single()
