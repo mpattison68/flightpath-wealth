@@ -16,20 +16,22 @@ type Seed = {
   sort_order: number;
 };
 
+// Amounts are seeded in the user's Target Currency (where retirement is
+// funded). Defaults assume ZAR — the app now separates Investment Currency
+// (portfolio) from Target Currency (spending & retirement lifestyle).
 export const SPENDING_SEEDS: Seed[] = [
-  { key: "housing",       label: "Housing",           rollup: "core",      essential: true,  amount: 12000, inflation_key: "inflation.uk",         sort_order: 10 },
-  { key: "utilities",     label: "Utilities",         rollup: "core",      essential: true,  amount: 3000,  inflation_key: "inflation.uk",         sort_order: 20 },
-  { key: "food",          label: "Food",              rollup: "core",      essential: true,  amount: 6000,  inflation_key: "inflation.uk",         sort_order: 30 },
-  { key: "medical",       label: "Medical",           rollup: "core",      essential: true,  amount: 3000,  inflation_key: "inflation.healthcare", sort_order: 40 },
-  { key: "insurance",     label: "Insurance",         rollup: "core",      essential: true,  amount: 2000,  inflation_key: "inflation.uk",         sort_order: 50 },
-  { key: "vehicles",      label: "Vehicles",          rollup: "core",      essential: true,  amount: 3000,  inflation_key: "inflation.uk",         sort_order: 60 },
-  { key: "household",     label: "Household",         rollup: "core",      essential: true,  amount: 3000,  inflation_key: "inflation.uk",         sort_order: 70 },
-  { key: "contingency",   label: "Contingency",       rollup: "core",      essential: true,  amount: 3000,  inflation_key: "inflation.uk",         sort_order: 80 },
-  { key: "travel",        label: "Travel",            rollup: "lifestyle", essential: false, amount: 8000,  inflation_key: "inflation.uk",         sort_order: 110 },
-  { key: "technology",    label: "Technology",        rollup: "lifestyle", essential: false, amount: 1500,  inflation_key: "inflation.uk",         sort_order: 120 },
-  { key: "entertainment", label: "Entertainment",     rollup: "lifestyle", essential: false, amount: 2500,  inflation_key: "inflation.uk",         sort_order: 130 },
-  { key: "family",        label: "Helping Family",    rollup: "lifestyle", essential: false, amount: 3000,  inflation_key: "inflation.uk",         sort_order: 140 },
-  { key: "charity",       label: "Charitable Giving", rollup: "lifestyle", essential: false, amount: 1500,  inflation_key: "inflation.uk",         sort_order: 150 },
+  { key: "housing",       label: "Housing & Utilities", rollup: "core",      essential: true,  amount: 180_000, inflation_key: "inflation.target",     sort_order: 10 },
+  { key: "food",          label: "Food",                rollup: "core",      essential: true,  amount: 150_000, inflation_key: "inflation.target",     sort_order: 30 },
+  { key: "medical",       label: "Medical",             rollup: "core",      essential: true,  amount: 180_000, inflation_key: "inflation.healthcare", sort_order: 40 },
+  { key: "insurance",     label: "Insurance",           rollup: "core",      essential: true,  amount: 60_000,  inflation_key: "inflation.target",     sort_order: 50 },
+  { key: "vehicles",      label: "Vehicles",            rollup: "core",      essential: true,  amount: 90_000,  inflation_key: "inflation.target",     sort_order: 60 },
+  { key: "household",     label: "Household",           rollup: "core",      essential: true,  amount: 60_000,  inflation_key: "inflation.target",     sort_order: 70 },
+  { key: "contingency",   label: "Contingency",         rollup: "core",      essential: true,  amount: 90_000,  inflation_key: "inflation.target",     sort_order: 80 },
+  { key: "travel",        label: "Travel",              rollup: "lifestyle", essential: false, amount: 180_000, inflation_key: "inflation.target",     sort_order: 110 },
+  { key: "technology",    label: "Technology",          rollup: "lifestyle", essential: false, amount: 30_000,  inflation_key: "inflation.target",     sort_order: 120 },
+  { key: "entertainment", label: "Entertainment",       rollup: "lifestyle", essential: false, amount: 90_000,  inflation_key: "inflation.target",     sort_order: 130 },
+  { key: "family",        label: "Helping Family",      rollup: "lifestyle", essential: false, amount: 60_000,  inflation_key: "inflation.target",     sort_order: 140 },
+  { key: "charity",       label: "Charitable Giving",   rollup: "lifestyle", essential: false, amount: 30_000,  inflation_key: "inflation.target",     sort_order: 150 },
 ];
 
 export const listSpending = createServerFn({ method: "GET" })

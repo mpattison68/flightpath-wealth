@@ -2,6 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useSuspenseQuery, queryOptions, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { listSpending, updateSpending } from "@/lib/spending.functions";
+import { getDashboardData } from "@/lib/dashboard.functions";
+import { targetCurrency } from "@/lib/currency";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -13,6 +15,7 @@ import { useState, useMemo } from "react";
 import { toast } from "sonner";
 
 const spendingQuery = queryOptions({ queryKey: ["spending"], queryFn: () => listSpending() });
+const dashQuery = queryOptions({ queryKey: ["dashboard"], queryFn: () => getDashboardData() });
 
 export const Route = createFileRoute("/_authenticated/spending")({
   head: () => ({
@@ -21,7 +24,10 @@ export const Route = createFileRoute("/_authenticated/spending")({
       { name: "description", content: "Break down what life actually costs each year, from essentials to lifestyle." },
     ],
   }),
-  loader: ({ context }) => context.queryClient.ensureQueryData(spendingQuery),
+  loader: ({ context }) => Promise.all([
+    context.queryClient.ensureQueryData(spendingQuery),
+    context.queryClient.ensureQueryData(dashQuery),
+  ]),
   component: SpendingPage,
 });
 
@@ -29,6 +35,8 @@ type Row = Awaited<ReturnType<typeof listSpending>>[number];
 
 function SpendingPage() {
   const { data } = useSuspenseQuery(spendingQuery);
+  const { data: dash } = useSuspenseQuery(dashQuery);
+  const tgtCcy = targetCurrency(dash.profile);
   const grouped = useMemo(() => {
     const core = data.filter((r) => r.rollup === "core");
     const lifestyle = data.filter((r) => r.rollup === "lifestyle");
@@ -41,12 +49,12 @@ function SpendingPage() {
 
   return (
     <>
-      <PageHeader title="Spending" description="What life actually costs each year — the input that drives your FIRE target." />
+      <PageHeader title="Spending" description={`What life actually costs each year in your target currency (${tgtCcy}) — the input that drives your FIRE target.`} />
       <div className="space-y-6 p-6">
         <div className="grid gap-4 sm:grid-cols-3">
-          <Summary label="Core spending" value={coreTotal} tone="core" />
-          <Summary label="Lifestyle spending" value={lifestyleTotal} tone="lifestyle" />
-          <Summary label="Total annual spending" value={total} tone="total" />
+          <Summary label="Core spending" value={coreTotal} currency={tgtCcy} tone="core" />
+          <Summary label="Lifestyle spending" value={lifestyleTotal} currency={tgtCcy} tone="lifestyle" />
+          <Summary label="Total annual spending" value={total} currency={tgtCcy} tone="total" />
         </div>
 
         <Section title="Core (essentials)" rows={grouped.core} />
@@ -56,13 +64,13 @@ function SpendingPage() {
   );
 }
 
-function Summary({ label, value, tone }: { label: string; value: number; tone: "core" | "lifestyle" | "total" }) {
+function Summary({ label, value, currency, tone }: { label: string; value: number; currency: string; tone: "core" | "lifestyle" | "total" }) {
   return (
     <Card>
       <CardContent className="p-4">
         <div className="text-xs text-muted-foreground">{label}</div>
         <div className={`text-2xl font-semibold tabular-nums ${tone === "total" ? "text-primary" : ""}`}>
-          {formatCurrency(value)}
+          {formatCurrency(value, currency)}
         </div>
       </CardContent>
     </Card>
