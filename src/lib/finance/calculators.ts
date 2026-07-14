@@ -123,3 +123,35 @@ export function dynamicFireTarget(i: DynamicFireInputs): DynamicFireResult {
     requiredCapital: capital,
   };
 }
+
+// -------- Currency conversion ------------------------------------------
+// The retirement engine performs its arithmetic in the Target Currency
+// (where the user actually spends). Portfolio values live in the
+// Investment Currency. Use these helpers to bridge the two — never mix
+// currencies inside a single calculation or chart.
+
+export function toTarget(amountInvestment: number, fxInvestmentToTarget: number): number {
+  return amountInvestment * fxInvestmentToTarget;
+}
+
+export function toInvestment(amountTarget: number, fxInvestmentToTarget: number): number {
+  return fxInvestmentToTarget > 0 ? amountTarget / fxInvestmentToTarget : 0;
+}
+
+// Retirement Purchasing Power Index (RPPI): how much of today's target-currency
+// spending 1 unit of investment capital will fund after growth, FX, and
+// target-currency inflation. Values >1 mean improved purchasing power.
+export type RppiInputs = {
+  years: number;
+  realGrowthPct: number;          // investment real growth
+  fxDriftPct: number;             // annual drift of investment→target currency
+  targetInflationPct: number;     // above the investment-currency inflation baked into real growth
+};
+
+export function rppi(i: RppiInputs): number {
+  const g = 1 + i.realGrowthPct / 100;
+  const fx = 1 + i.fxDriftPct / 100;
+  const infl = 1 + i.targetInflationPct / 100;
+  if (infl === 0) return 0;
+  return Math.pow(g * fx / infl, i.years);
+}
